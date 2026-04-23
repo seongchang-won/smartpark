@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>태화강국가정원 스마트공원 IoT 통합관제</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+<link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+
+<!-- Header -->
+<div class="header">
+  <div class="header-left">
+    <div class="header-icon">🌿</div>
+    <div>
+      <div class="header-title">태화강국가정원 <span>IoT 통합관제</span></div>
+      <div class="header-sub">스마트공원 시설물 관리 시스템 v1.0</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      실시간 모니터링
+    </div>
+    <div class="clock mono" id="clock"></div>
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="테마 전환">🌙</button>
+  </div>
+</div>
+
+<!-- Main -->
+<div class="main">
+  <!-- Map -->
+  <div class="map-container">
+    <div id="map"></div>
+    <div class="map-controls" id="filterBar"></div>
+    <div class="add-menu hidden" id="addMenu"></div>
+    <div class="add-indicator hidden" id="addIndicator"></div>
+    <div class="stats-overlay" id="statsOverlay"></div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div id="detailPanel">
+      <div class="select-prompt">
+        <div class="icon">📍</div>
+        <p>지도에서 시설물을 선택하면<br>상세 정보를 확인할 수 있습니다</p>
+      </div>
+    </div>
+    <div class="alert-section">
+      <div class="alert-section-header">
+        <span>🚨 경고 알림 <span class="alert-count" id="alertCount">0</span></span>
+      </div>
+      <div class="alert-list" id="alertList"></div>
+    </div>
+    <div class="overall-gauge" id="overallGauge"></div>
+  </div>
+</div>
+
+<script src="js/app.js"></script>
+</body>
+</html>

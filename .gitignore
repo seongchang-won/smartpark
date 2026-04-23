@@ -1,0 +1,21 @@
+# Claude Code 설정
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# 로그
+*.log
+npm-debug.log*
+
+# 임시 파일
+*.tmp
+*.bak
