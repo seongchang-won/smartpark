@@ -747,6 +747,23 @@ window.finishParkCreation = function() {
   renderDrawingPreview();
 };
 
+// renderParkOutline 훅: Leaflet 경계 갱신 시 Cesium도 함께 갱신
+// (경계 추가/편집/삭제/점 삭제 모두 이 경로를 통과)
+const _origRenderParkOutline = window.renderParkOutline;
+window.renderParkOutline = function() {
+  if (typeof _origRenderParkOutline === 'function') _origRenderParkOutline();
+  render3DBoundary();
+};
+
+// finishVertexDelete 훅: 점 삭제 완료 시 갱신
+const _origFinishVertexDelete = window.finishVertexDelete;
+if (typeof _origFinishVertexDelete === 'function') {
+  window.finishVertexDelete = function() {
+    _origFinishVertexDelete();
+    render3DBoundary();
+  };
+}
+
 // 짧은 클릭 → 그리기 모드면 점 추가, 아니면 selectFacility
 handler.setInputAction((click) => {
   if (holoJustDragged) return;
