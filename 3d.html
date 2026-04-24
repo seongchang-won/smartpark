@@ -1092,46 +1092,111 @@ let drawPreviewLine = null;
 let drawPreviewPoints = [];
 
 function renderDrawingPreview() {
+  // 기존 엔티티 정리
   if (drawPreviewLine) { viewer.entities.remove(drawPreviewLine); drawPreviewLine = null; }
   drawPreviewPoints.forEach(e => viewer.entities.remove(e));
   drawPreviewPoints = [];
+
+  // ── 점 선택 삭제 모드 ──────────────────────────────────────────
+  if (typeof vertexDeleteMode !== 'undefined' && vertexDeleteMode) {
+    const boundary = typeof vertexDeleteBoundary !== 'undefined' ? vertexDeleteBoundary : [];
+    boundary.forEach((poly, polyIdx) => {
+      if (!poly || poly.length === 0) return;
+      // 폴리곤 외곽선
+      if (poly.length >= 2) {
+        const flat = [];
+        [...poly, poly[0]].forEach(p => flat.push(p[1], p[0]));
+        drawPreviewPoints.push(viewer.entities.add({
+          polyline: {
+            positions: Cesium.Cartesian3.fromDegreesArray(flat),
+            width: 2.5,
+            material: new Cesium.PolylineDashMaterialProperty({
+              color: Cesium.Color.fromCssColorString('#f59e0b'),
+              dashLength: 10,
+            }),
+            clampToGround: true,
+          },
+        }));
+      }
+      // 삭제 가능한 점들
+      poly.forEach((pt, ptIdx) => {
+        const e = viewer.entities.add({
+          position: Cesium.Cartesian3.fromDegrees(pt[1], pt[0]),
+          point: {
+            pixelSize: 12,
+            color: Cesium.Color.fromCssColorString('#ef4444'),
+            outlineColor: Cesium.Color.WHITE,
+            outlineWidth: 2.5,
+            heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+          label: {
+            text: `${ptIdx + 1}`,
+            font: 'bold 10px monospace',
+            fillColor: Cesium.Color.WHITE,
+            outlineColor: Cesium.Color.BLACK, outlineWidth: 2,
+            style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+            pixelOffset: new Cesium.Cartesian2(12, -12),
+            disableDepthTestDistance: Number.POSITIVE_INFINITY,
+          },
+          _vdPolyIdx: polyIdx,
+          _vdPtIdx: ptIdx,
+        });
+        drawPreviewPoints.push(e);
+      });
+    });
+    return;
+  }
+
+  // ── 공원 경계 그리기 / 이어 나가기 ────────────────────────────
   const drawing = (typeof parkDrawingMode !== 'undefined' && parkDrawingMode);
   if (!drawing) return;
   const pts = (typeof parkDrawingPoints !== 'undefined') ? parkDrawingPoints : [];
   if (pts.length === 0) return;
-  // 각 점 표시
+
+  const isExtend = typeof editingMode !== 'undefined' && editingMode === 'extend';
+  const insertionIdx = typeof extendInsertionIdx !== 'undefined' ? extendInsertionIdx : -1;
+
+  // 점 표시
   pts.forEach((pt, idx) => {
-    drawPreviewPoints.push(viewer.entities.add({
+    const isInsertion = isExtend && idx === insertionIdx;
+    const dotColor = isInsertion ? '#22c55e' : (isExtend ? '#60a5fa' : '#ef4444');
+    const dotSize  = isInsertion ? 14 : 10;
+    const e = viewer.entities.add({
       position: Cesium.Cartesian3.fromDegrees(pt[1], pt[0]),
       point: {
-        pixelSize: 10,
-        color: Cesium.Color.fromCssColorString('#ef4444'),
+        pixelSize: dotSize,
+        color: Cesium.Color.fromCssColorString(dotColor),
         outlineColor: Cesium.Color.WHITE,
-        outlineWidth: 2,
+        outlineWidth: isInsertion ? 3 : 2,
         heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
       label: {
-        text: `${idx + 1}`,
-        font: 'bold 10px monospace',
+        text: isInsertion ? `▶ ${idx + 1}` : `${idx + 1}`,
+        font: isInsertion ? 'bold 11px monospace' : 'bold 10px monospace',
         fillColor: Cesium.Color.WHITE,
         outlineColor: Cesium.Color.BLACK, outlineWidth: 2,
         style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        pixelOffset: new Cesium.Cartesian2(10, -10),
+        pixelOffset: new Cesium.Cartesian2(13, -11),
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
-    }));
+      _extendPointIdx: isExtend ? idx : undefined,
+    });
+    drawPreviewPoints.push(e);
   });
+
   // 선 표시 (2점 이상)
   if (pts.length >= 2) {
     const flat = [];
     pts.forEach(pt => flat.push(pt[1], pt[0]));
+    const lineColor = isExtend ? '#60a5fa' : '#ef4444';
     drawPreviewLine = viewer.entities.add({
       polyline: {
         positions: Cesium.Cartesian3.fromDegreesArray(flat),
         width: 3,
         material: new Cesium.PolylineDashMaterialProperty({
-          color: Cesium.Color.fromCssColorString('#ef4444'),
+          color: Cesium.Color.fromCssColorString(lineColor),
           dashLength: 12,
         }),
         clampToGround: true,
@@ -1153,28 +1218,111 @@ window.finishParkCreation = function() {
 };
 
 // renderParkOutline 훅: Leaflet 경계 갱신 시 Cesium도 함께 갱신
-// (경계 추가/편집/삭제/점 삭제 모두 이 경로를 통과)
 const _origRenderParkOutline = window.renderParkOutline;
 window.renderParkOutline = function() {
   if (typeof _origRenderParkOutline === 'function') _origRenderParkOutline();
   render3DBoundary();
 };
 
-// finishVertexDelete 훅: 점 삭제 완료 시 갱신
+// finishVertexDelete 훅: 완료 후 정리 + 갱신
 const _origFinishVertexDelete = window.finishVertexDelete;
 if (typeof _origFinishVertexDelete === 'function') {
   window.finishVertexDelete = function() {
     _origFinishVertexDelete();
+    renderDrawingPreview();
     render3DBoundary();
   };
 }
 
-// 짧은 클릭 → 그리기 모드면 점 추가, 아니면 selectFacility
+// exitVertexDelete 훅: 취소/완료 후 Cesium 점 정리
+const _origExitVertexDelete = window.exitVertexDelete;
+if (typeof _origExitVertexDelete === 'function') {
+  window.exitVertexDelete = function() {
+    _origExitVertexDelete();
+    renderDrawingPreview();
+  };
+}
+
+// startVertexDelete 훅: 시작 직후 Cesium 렌더
+const _origStartVertexDelete = window.startVertexDelete;
+if (typeof _origStartVertexDelete === 'function') {
+  window.startVertexDelete = function(parkId) {
+    _origStartVertexDelete(parkId);
+    setTimeout(renderDrawingPreview, 50);
+  };
+}
+
+// renderVertexDeletion 훅: 점 삭제 때마다 Cesium 동기화
+const _origRenderVertexDeletion = window.renderVertexDeletion;
+if (typeof _origRenderVertexDeletion === 'function') {
+  window.renderVertexDeletion = function() {
+    _origRenderVertexDeletion();
+    renderDrawingPreview();
+  };
+}
+
+// startExtendPolygon 훅: 이어 나가기 시작 시 Cesium 렌더
+const _origStartExtendPolygon = window.startExtendPolygon;
+if (typeof _origStartExtendPolygon === 'function') {
+  window.startExtendPolygon = function(parkId, polyIdx) {
+    _origStartExtendPolygon(parkId, polyIdx);
+    setTimeout(renderDrawingPreview, 50);
+  };
+}
+
+// renderExtendState 훅: 삽입점 변경 시 Cesium 동기화
+const _origRenderExtendState = window.renderExtendState;
+if (typeof _origRenderExtendState === 'function') {
+  window.renderExtendState = function() {
+    _origRenderExtendState();
+    renderDrawingPreview();
+  };
+}
+
+// 짧은 클릭 → 그리기/삭제 모드 우선, 아니면 selectFacility
 handler.setInputAction((click) => {
   if (holoJustDragged) return;
 
-  // 공원 경계 그리기 중이면 Cesium 클릭을 점 추가로 전달
+  const picked = viewer.scene.pick(click.position);
+
+  // ── 점 선택 삭제 모드 ──────────────────────────────────────────
+  if (typeof vertexDeleteMode !== 'undefined' && vertexDeleteMode) {
+    if (picked && picked.id && picked.id._vdPolyIdx != null) {
+      const polyIdx = picked.id._vdPolyIdx;
+      const ptIdx   = picked.id._vdPtIdx;
+      const boundary = typeof vertexDeleteBoundary !== 'undefined' ? vertexDeleteBoundary : [];
+      const poly = boundary[polyIdx];
+      if (!poly) return;
+      if (poly.length <= 3) {
+        if (boundary.length > 1) {
+          if (confirm(`이 영역(${polyIdx + 1}번)을 전체 삭제할까요?`)) {
+            boundary.splice(polyIdx, 1);
+            if (typeof updateVertexCount === 'function') updateVertexCount();
+            renderDrawingPreview();
+          }
+        } else {
+          if (typeof showToast === 'function') showToast('⚠️', '각 영역은 최소 3점이 필요합니다', 'warn', 2500);
+        }
+      } else {
+        poly.splice(ptIdx, 1);
+        if (typeof updateVertexCount === 'function') updateVertexCount();
+        renderDrawingPreview();
+      }
+    }
+    return;
+  }
+
+  // ── 경계 그리기 모드 ──────────────────────────────────────────
   if (typeof parkDrawingMode !== 'undefined' && parkDrawingMode) {
+    // extend 모드: 점 클릭이면 삽입점 변경
+    if (typeof editingMode !== 'undefined' && editingMode === 'extend') {
+      if (picked && picked.id && picked.id._extendPointIdx != null) {
+        extendInsertionIdx = picked.id._extendPointIdx;
+        renderDrawingPreview();
+        return;
+      }
+    }
+    // 지도 클릭 → 점 추가
     const cart = viewer.camera.pickEllipsoid(click.position, viewer.scene.globe.ellipsoid);
     if (!cart) return;
     const c = Cesium.Cartographic.fromCartesian(cart);
@@ -1189,7 +1337,7 @@ handler.setInputAction((click) => {
     return;
   }
 
-  const picked = viewer.scene.pick(click.position);
+  // ── 시설물 선택 ───────────────────────────────────────────────
   if (picked && picked.id && picked.id.facilityId) {
     if (holoActionsEl && holoActionsForId !== picked.id.facilityId) hideMarkerActions();
     window.selectFacility(picked.id.facilityId);
