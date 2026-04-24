@@ -526,7 +526,8 @@ function renderFacility3D(f) {
         showBackground: true,
         backgroundColor: Cesium.Color.fromCssColorString('#0c1322').withAlpha(0.85),
         backgroundPadding: new Cesium.Cartesian2(6, 3),
-        pixelOffset: new Cesium.Cartesian2(0, -48),
+        // HP 수치(-105) 위에 스택 (마커 아이콘을 가리지 않게)
+        pixelOffset: new Cesium.Cartesian2(0, -140),
         verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
         distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2500),
