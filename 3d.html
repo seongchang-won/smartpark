@@ -68,6 +68,96 @@
     border-color: #e2e8f0;
   }
   body.light-theme .map-3d-bar button:hover { background: #f1f5f9; color: #0f172a; }
+
+  /* 시설 hover 툴팁 */
+  .fac-hover-tooltip {
+    position: fixed;
+    z-index: 1300;
+    min-width: 260px;
+    max-width: 320px;
+    background: rgba(8, 14, 28, 0.95);
+    border: 2px solid #22d3ee;
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: #e2e8f0;
+    font-family: 'Noto Sans KR', sans-serif;
+    font-size: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5), 0 0 20px rgba(34,211,238,0.25);
+    backdrop-filter: blur(8px);
+    pointer-events: none;
+    animation: ftIn 0.18s ease-out;
+  }
+  @keyframes ftIn {
+    from { opacity: 0; transform: translateY(4px) scale(0.97); }
+    to   { opacity: 1; transform: translateY(0) scale(1); }
+  }
+  .fac-hover-tooltip .ft-head {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 8px;
+  }
+  .fac-hover-tooltip .ft-icon-wrap {
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    border: 1px solid;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+  .fac-hover-tooltip .ft-info { flex: 1; min-width: 0; }
+  .fac-hover-tooltip .ft-name {
+    font-size: 13px; font-weight: 800; color: #fff;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .fac-hover-tooltip .ft-meta {
+    font-size: 10px; color: #64748b; margin-top: 2px;
+  }
+  .fac-hover-tooltip .ft-hp {
+    font-size: 22px; font-weight: 800;
+    font-family: 'JetBrains Mono', monospace;
+    line-height: 1;
+    flex-shrink: 0;
+  }
+  .fac-hover-tooltip .ft-hp-bar {
+    width: 100%; height: 6px;
+    background: #1e293b;
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .fac-hover-tooltip .ft-hp-bar > div {
+    height: 100%; border-radius: 3px;
+    transition: width 0.2s;
+  }
+  .fac-hover-tooltip .ft-chips {
+    display: flex; flex-wrap: wrap; gap: 4px;
+    margin-bottom: 6px;
+  }
+  .fac-hover-tooltip .ft-chip {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 10px; font-weight: 700;
+    white-space: nowrap;
+  }
+  .fac-hover-tooltip .ft-chip-warn  { background: #f59e0b25; color: #fcd34d; border: 1px solid #f59e0b50; }
+  .fac-hover-tooltip .ft-chip-alert { background: #ef444425; color: #fca5a5; border: 1px solid #ef444450; }
+  .fac-hover-tooltip .ft-chip-info  { background: #3b82f625; color: #93c5fd; border: 1px solid #3b82f650; }
+  .fac-hover-tooltip .ft-chip-ok    { background: #22c55e25; color: #86efac; border: 1px solid #22c55e50; }
+  .fac-hover-tooltip .ft-foot {
+    font-size: 10px; color: #64748b;
+    font-family: 'JetBrains Mono', monospace;
+    padding-top: 4px;
+    border-top: 1px dashed #1e293b;
+  }
+
+  body.light-theme .fac-hover-tooltip {
+    background: rgba(255,255,255,0.95);
+    border-color: #22d3ee;
+    color: #0f172a;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.15), 0 0 20px rgba(34,211,238,0.15);
+  }
+  body.light-theme .fac-hover-tooltip .ft-name { color: #0f172a; }
+  body.light-theme .fac-hover-tooltip .ft-foot { border-top-color: #e2e8f0; }
+  body.light-theme .fac-hover-tooltip .ft-hp-bar { background: #e2e8f0; }
 </style>
 </head>
 <body>
@@ -532,37 +622,7 @@ function renderFacility3D(f) {
       },
     })));
 
-    // HP 수치 (글로우 캔버스 빌보드)
-    entities.push(tag(viewer.entities.add({
-      position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, 60),
-      billboard: {
-        image: buildHpGlowCanvas(hp, color),
-        verticalOrigin: Cesium.VerticalOrigin.CENTER,
-        pixelOffset: new Cesium.Cartesian2(0, -100),
-        scale: 0.8,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 5000),
-      },
-    })));
-    entities.push(tag(viewer.entities.add({
-      position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, 60),
-      label: {
-        text: f.name,
-        font: 'bold 11px "Noto Sans KR", sans-serif',
-        fillColor: Cesium.Color.WHITE,
-        outlineColor: Cesium.Color.fromCssColorString('#0c1322'),
-        outlineWidth: 3,
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        showBackground: true,
-        backgroundColor: Cesium.Color.fromCssColorString('#0c1322').withAlpha(0.85),
-        backgroundPadding: new Cesium.Cartesian2(6, 3),
-        // HP 수치(-105) 위에 스택 (마커 아이콘을 가리지 않게)
-        pixelOffset: new Cesium.Cartesian2(0, -140),
-        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-        disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2500),
-      },
-    })));
+    // HP 수치와 시설명은 상시 노출하지 않음 — 마우스 hover 시 툴팁으로 표시
   } else {
     entities.push(tag(viewer.entities.add({
       name: f.name,
@@ -742,19 +802,91 @@ handler.setInputAction((event) => {
   }
 }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
 
+// 시설 hover 툴팁
+let hoverTooltipEl = null;
+let hoverLastId = null;
+function ensureHoverTooltip() {
+  if (hoverTooltipEl) return hoverTooltipEl;
+  hoverTooltipEl = document.createElement('div');
+  hoverTooltipEl.className = 'fac-hover-tooltip';
+  hoverTooltipEl.style.display = 'none';
+  document.body.appendChild(hoverTooltipEl);
+  return hoverTooltipEl;
+}
+function showHoverTooltip(f, sx, sy) {
+  const el = ensureHoverTooltip();
+  const cfg = TYPE_CFG_3D[f.type] || { icon:'📍', color:'#94a3b8' };
+  const typeLabel = {bench:'벤치',restroom:'화장실',exercise:'운동기구',light:'가로등',parking:'주차장',bin:'쓰레기통',cctv:'CCTV'}[f.type] || f.type;
+  const hp = f.hp || 0;
+  const hpC = hpColor3D(hp);
+  const beamC = beamColor3D(hp);
+  const pending = (typeof INSPECTIONS !== 'undefined' ? INSPECTIONS : []).filter(i => i.facilityId === f.id && i.status === 'pending').length;
+  const repairs = (typeof REPAIRS !== 'undefined' ? REPAIRS : []).filter(r => r.facilityId === f.id && r.status !== 'done').length;
+  const assignee = f.assigneeId && typeof getStaffById === 'function' ? getStaffById(f.assigneeId) : null;
+  el.style.borderColor = beamC;
+  el.innerHTML = `
+    <div class="ft-head">
+      <div class="ft-icon-wrap" style="border-color:${cfg.color}60;background:${cfg.color}22;">${cfg.icon}</div>
+      <div class="ft-info">
+        <div class="ft-name">${f.name}</div>
+        <div class="ft-meta">${cfg.icon} ${typeLabel} · ${f.id} · ${f.zone || '-'}</div>
+      </div>
+      <div class="ft-hp mono" style="color:${hpC};text-shadow:0 0 8px ${hpC}88;">${hp}</div>
+    </div>
+    <div class="ft-hp-bar"><div style="width:${hp}%;background:linear-gradient(90deg,${hpC}cc,${hpC});box-shadow:0 0 6px ${hpC}88;"></div></div>
+    <div class="ft-chips">
+      ${pending ? `<span class="ft-chip ft-chip-warn">📋 점검 ${pending}</span>` : ''}
+      ${repairs ? `<span class="ft-chip ft-chip-alert">🔧 수리 ${repairs}</span>` : ''}
+      ${assignee ? `<span class="ft-chip ft-chip-info">${assignee.avatar} ${assignee.name}</span>` : ''}
+      ${!pending && !repairs && !assignee ? `<span class="ft-chip ft-chip-ok">✓ 이상 없음</span>` : ''}
+    </div>
+    <div class="ft-foot">마지막 점검 · ${f.lastCheck || '-'}</div>
+  `;
+  el.style.display = 'block';
+  // 포지셔닝
+  const rect = el.getBoundingClientRect();
+  let x = sx + 18;
+  let y = sy - rect.height / 2;
+  if (x + rect.width > window.innerWidth - 8) x = sx - rect.width - 18;
+  if (y < 8) y = 8;
+  if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
+  el.style.left = x + 'px';
+  el.style.top = y + 'px';
+}
+function hideHoverTooltip() {
+  if (hoverTooltipEl) hoverTooltipEl.style.display = 'none';
+  hoverLastId = null;
+}
+
 handler.setInputAction((event) => {
-  if (!holoDragMode || !holoPressedId) return;
-  const cart = viewer.camera.pickEllipsoid(event.endPosition, viewer.scene.globe.ellipsoid);
-  if (!cart) return;
-  const c = Cesium.Cartographic.fromCartesian(cart);
-  const lng = Cesium.Math.toDegrees(c.longitude);
-  const lat = Cesium.Math.toDegrees(c.latitude);
-  const f = (typeof FACILITIES !== 'undefined' ? FACILITIES : []).find(x => x.id === holoPressedId);
-  if (!f) return;
-  f.lat = lat;
-  f.lng = lng;
-  renderFacility3D(f);
-  positionMarkerActions();
+  // 드래그 중이면 위치 이동 처리
+  if (holoDragMode && holoPressedId) {
+    const cart = viewer.camera.pickEllipsoid(event.endPosition, viewer.scene.globe.ellipsoid);
+    if (!cart) return;
+    const c = Cesium.Cartographic.fromCartesian(cart);
+    const lng = Cesium.Math.toDegrees(c.longitude);
+    const lat = Cesium.Math.toDegrees(c.latitude);
+    const f = (typeof FACILITIES !== 'undefined' ? FACILITIES : []).find(x => x.id === holoPressedId);
+    if (!f) return;
+    f.lat = lat;
+    f.lng = lng;
+    renderFacility3D(f);
+    positionMarkerActions();
+    return;
+  }
+  // 평소: hover 툴팁 갱신
+  const picked = viewer.scene.pick(event.endPosition);
+  if (picked && picked.id && picked.id.facilityId) {
+    const fid = picked.id.facilityId;
+    const f = (typeof FACILITIES !== 'undefined' ? FACILITIES : []).find(x => x.id === fid);
+    if (!f) { hideHoverTooltip(); return; }
+    hoverLastId = fid;
+    document.body.style.cursor = 'pointer';
+    showHoverTooltip(f, event.endPosition.x, event.endPosition.y);
+  } else {
+    if (hoverLastId) hideHoverTooltip();
+    if (!holoDragMode) document.body.style.cursor = '';
+  }
 }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
 handler.setInputAction(() => {
