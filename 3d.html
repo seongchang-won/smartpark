@@ -563,14 +563,15 @@ window.switchPark = function(pid) {
 };
 
 // ============== 클릭 + 롱프레스 드래그 + 액션 오버레이 ==============
-const LONG_PRESS_MS = 500;
-let pressTimer = null;
-let pressedFacilityId = null;
-let dragMode = false;
-let justDragged = false;
-let actionsEl = null;
-let actionsForId = null;
-let actionsPostRenderFn = null;
+// (app.js와의 전역 변수 충돌 회피를 위해 고유 prefix 사용)
+const HOLO_PRESS_MS = 500;
+let holoPressTimer = null;
+let holoPressedId = null;
+let holoDragMode = false;
+let holoJustDragged = false;
+let holoActionsEl = null;
+let holoActionsForId = null;
+let holoActionsPostRenderFn = null;
 
 function entityScreenPos(facilityId, height) {
   const f = (typeof FACILITIES !== 'undefined' ? FACILITIES : []).find(x => x.id === facilityId);
@@ -581,43 +582,43 @@ function entityScreenPos(facilityId, height) {
 
 function showMarkerActions(facilityId) {
   hideMarkerActions();
-  actionsForId = facilityId;
-  actionsEl = document.createElement('div');
-  actionsEl.className = 'marker-actions';
-  actionsEl.style.position = 'fixed';
-  actionsEl.style.zIndex = '1200';
-  actionsEl.innerHTML = `
+  holoActionsForId = facilityId;
+  holoActionsEl = document.createElement('div');
+  holoActionsEl.className = 'marker-actions';
+  holoActionsEl.style.position = 'fixed';
+  holoActionsEl.style.zIndex = '1200';
+  holoActionsEl.innerHTML = `
     <button class="ma-btn ma-edit" onclick="window.editFacility('${facilityId}'); hideMarkerActions();">✏️ 수정</button>
     <button class="ma-btn ma-delete" onclick="window.deleteFacility('${facilityId}'); hideMarkerActions();">🗑️ 삭제</button>
   `;
-  document.body.appendChild(actionsEl);
+  document.body.appendChild(holoActionsEl);
   positionMarkerActions();
-  actionsPostRenderFn = () => positionMarkerActions();
-  viewer.scene.postRender.addEventListener(actionsPostRenderFn);
+  holoActionsPostRenderFn = () => positionMarkerActions();
+  viewer.scene.postRender.addEventListener(holoActionsPostRenderFn);
 }
 
 function positionMarkerActions() {
-  if (!actionsEl || !actionsForId) return;
-  const pos = entityScreenPos(actionsForId, holoMode ? 60 : 2);
+  if (!holoActionsEl || !holoActionsForId) return;
+  const pos = entityScreenPos(holoActionsForId, holoMode ? 60 : 2);
   if (!pos) return;
-  actionsEl.style.left = pos.x + 'px';
-  actionsEl.style.top = (pos.y + 24) + 'px';
-  actionsEl.style.transform = 'translateX(-50%)';
+  holoActionsEl.style.left = pos.x + 'px';
+  holoActionsEl.style.top = (pos.y + 24) + 'px';
+  holoActionsEl.style.transform = 'translateX(-50%)';
 }
 
 function hideMarkerActions() {
-  if (actionsPostRenderFn) {
-    try { viewer.scene.postRender.removeEventListener(actionsPostRenderFn); } catch(e){}
-    actionsPostRenderFn = null;
+  if (holoActionsPostRenderFn) {
+    try { viewer.scene.postRender.removeEventListener(holoActionsPostRenderFn); } catch(e){}
+    holoActionsPostRenderFn = null;
   }
-  if (actionsEl) { actionsEl.remove(); actionsEl = null; }
-  actionsForId = null;
+  if (holoActionsEl) { holoActionsEl.remove(); holoActionsEl = null; }
+  holoActionsForId = null;
 }
 
 // 빈 공간 클릭 시 액션 오버레이 숨김
 document.addEventListener('click', (e) => {
-  if (!actionsEl) return;
-  if (actionsEl.contains(e.target)) return;
+  if (!holoActionsEl) return;
+  if (holoActionsEl.contains(e.target)) return;
   // 지도 캔버스를 클릭했고 타겟이 다른 시설 마커면 계속, 아니면 숨김
   // 단순히 "다른 곳" 클릭이면 닫기로 처리 (시설 선택은 LEFT_CLICK으로 따로 처리됨)
 });
@@ -627,35 +628,35 @@ const handler = viewer.screenSpaceEventHandler;
 handler.setInputAction((event) => {
   const picked = viewer.scene.pick(event.position);
   if (picked && picked.id && picked.id.facilityId) {
-    pressedFacilityId = picked.id.facilityId;
-    if (pressTimer) clearTimeout(pressTimer);
-    pressTimer = setTimeout(() => {
-      pressTimer = null;
-      if (!pressedFacilityId) return;
+    holoPressedId = picked.id.facilityId;
+    if (holoPressTimer) clearTimeout(holoPressTimer);
+    holoPressTimer = setTimeout(() => {
+      holoPressTimer = null;
+      if (!holoPressedId) return;
       // 롱프레스 → 드래그 모드 진입
-      dragMode = true;
+      holoDragMode = true;
       viewer.scene.screenSpaceCameraController.enableInputs = false;
       document.body.style.cursor = 'grabbing';
       if (typeof showToast === 'function') {
         showToast('✋', `<strong>드래그 모드</strong> · 드래그해서 이동, 놓으면 저장`, 'info', 4000);
       }
-      showMarkerActions(pressedFacilityId);
+      showMarkerActions(holoPressedId);
       if (navigator.vibrate) navigator.vibrate(30);
-    }, LONG_PRESS_MS);
+    }, HOLO_PRESS_MS);
   } else {
-    pressedFacilityId = null;
+    holoPressedId = null;
     hideMarkerActions();
   }
 }, Cesium.ScreenSpaceEventType.LEFT_DOWN);
 
 handler.setInputAction((event) => {
-  if (!dragMode || !pressedFacilityId) return;
+  if (!holoDragMode || !holoPressedId) return;
   const cart = viewer.camera.pickEllipsoid(event.endPosition, viewer.scene.globe.ellipsoid);
   if (!cart) return;
   const c = Cesium.Cartographic.fromCartesian(cart);
   const lng = Cesium.Math.toDegrees(c.longitude);
   const lat = Cesium.Math.toDegrees(c.latitude);
-  const f = (typeof FACILITIES !== 'undefined' ? FACILITIES : []).find(x => x.id === pressedFacilityId);
+  const f = (typeof FACILITIES !== 'undefined' ? FACILITIES : []).find(x => x.id === holoPressedId);
   if (!f) return;
   f.lat = lat;
   f.lng = lng;
@@ -664,29 +665,29 @@ handler.setInputAction((event) => {
 }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
 
 handler.setInputAction(() => {
-  if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-  if (dragMode) {
-    const fid = pressedFacilityId;
-    dragMode = false;
+  if (holoPressTimer) { clearTimeout(holoPressTimer); holoPressTimer = null; }
+  if (holoDragMode) {
+    const fid = holoPressedId;
+    holoDragMode = false;
     viewer.scene.screenSpaceCameraController.enableInputs = true;
     document.body.style.cursor = '';
-    justDragged = true;
-    setTimeout(() => { justDragged = false; }, 120);
+    holoJustDragged = true;
+    setTimeout(() => { holoJustDragged = false; }, 120);
     if (typeof saveFacilities === 'function') saveFacilities();
     if (fid && typeof showToast === 'function') {
       const f = (typeof FACILITIES !== 'undefined' ? FACILITIES : []).find(x => x.id === fid);
       if (f) showToast('📍', `<strong>${f.name}</strong> 위치 이동 저장됨`, 'ok', 2500);
     }
   }
-  pressedFacilityId = null;
+  holoPressedId = null;
 }, Cesium.ScreenSpaceEventType.LEFT_UP);
 
 // 짧은 클릭 → selectFacility
 handler.setInputAction((click) => {
-  if (justDragged) return; // 드래그 직후 클릭 무시
+  if (holoJustDragged) return; // 드래그 직후 클릭 무시
   const picked = viewer.scene.pick(click.position);
   if (picked && picked.id && picked.id.facilityId) {
-    if (actionsEl && actionsForId !== picked.id.facilityId) hideMarkerActions();
+    if (holoActionsEl && holoActionsForId !== picked.id.facilityId) hideMarkerActions();
     window.selectFacility(picked.id.facilityId);
   } else {
     hideMarkerActions();
