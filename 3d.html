@@ -2,50 +2,46 @@
 <html lang="ko">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>태화강국가정원 3D · VWorld</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#090e1a">
+<title>태화강국가정원 3D · 스마트공원 IoT 통합관제</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
 <link href="https://cdn.jsdelivr.net/npm/cesium@1.112.0/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/cesium@1.112.0/Build/Cesium/Cesium.js"></script>
+<link rel="stylesheet" href="css/style.css" />
 <style>
-  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
-  html, body { margin:0; padding:0; overflow:hidden; height:100vh; font-family:'Noto Sans KR', sans-serif; background:#000; }
-  #cesiumContainer { width:100%; height:100vh; }
-  .cesium-widget-credits { display:none !important; }
-
-  .top-bar {
-    position: fixed;
-    top: 14px; left: 14px; right: 14px;
-    z-index: 1000;
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    gap: 10px;
+  /* Leaflet 맵은 화면 밖으로 숨김 (app.js 초기화용) */
+  #map {
+    position: absolute !important;
+    left: -9999px !important;
+    top: 0 !important;
+    width: 300px !important;
+    height: 300px !important;
     pointer-events: none;
   }
-  .tb-btn, .tb-info {
-    pointer-events: auto;
-    padding: 9px 14px;
-    background: rgba(12,19,34,0.88);
-    color: #e2e8f0;
-    border: 1px solid #334155;
-    border-radius: 10px;
-    text-decoration: none;
-    font-size: 13px;
-    font-weight: 700;
-    backdrop-filter: blur(8px);
-    display: flex; align-items: center; gap: 8px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  #cesiumContainer {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
   }
-  .tb-btn:hover { background: rgba(30,41,59,0.95); border-color: #475569; }
-  .tb-info .sub { font-size: 11px; color: #94a3b8; font-weight: 500; margin-left: 6px; }
-
-  .preset-bar {
-    position: fixed;
-    top: 72px; right: 14px;
-    z-index: 1000;
+  .map-container { position: relative; background: #000; }
+  .cesium-widget-credits { display:none !important; }
+  /* 맵 오버레이 컨트롤은 Cesium 위에 */
+  .map-controls, .stats-overlay, .add-indicator, .add-menu,
+  .map-3d-bar {
+    z-index: 20 !important;
+  }
+  /* 3D 우상단 레이어·카메라 바 */
+  .map-3d-bar {
+    position: absolute;
+    top: 12px; right: 12px;
     display: flex; flex-direction: column; gap: 6px;
   }
-  .preset-bar button {
+  .map-3d-bar button {
     padding: 6px 11px;
     background: rgba(12,19,34,0.85);
     color: #cbd5e1;
@@ -57,264 +53,142 @@
     backdrop-filter: blur(6px);
     min-width: 116px;
     text-align: left;
+    transition: all 0.15s;
   }
-  .preset-bar button:hover { background: rgba(30,41,59,0.95); color: #fff; }
-  .preset-bar button.active { background: rgba(34,211,238,0.25); border-color: #22d3ee; color: #fff; }
-  .preset-bar .sep {
-    height: 1px; background: #334155; margin: 2px 0;
-  }
-  .preset-bar .title {
+  .map-3d-bar button:hover { background: rgba(30,41,59,0.95); color: #fff; }
+  .map-3d-bar button.active { background: rgba(34,211,238,0.25); border-color: #22d3ee; color: #fff; }
+  .map-3d-bar .bar-title {
     font-size: 9px; color: #64748b;
     padding: 2px 4px; margin-top: 4px;
     text-transform: uppercase; letter-spacing: 0.5px;
   }
-
-  .bottom-info {
-    position: fixed;
-    bottom: 14px; left: 14px;
-    z-index: 1000;
-    padding: 10px 14px;
-    background: rgba(12,19,34,0.88);
-    color: #94a3b8;
-    border: 1px solid #334155;
-    border-radius: 10px;
-    backdrop-filter: blur(8px);
-    font-size: 11px;
-    max-width: 320px;
-    line-height: 1.55;
+  body.light-theme .map-3d-bar button {
+    background: rgba(255,255,255,0.9); color: #475569;
+    border-color: #e2e8f0;
   }
-  .bottom-info strong { color: #e2e8f0; }
-
-  .legend {
-    position: fixed;
-    bottom: 14px; right: 14px;
-    z-index: 1000;
-    padding: 10px 12px;
-    background: rgba(12,19,34,0.88);
-    color: #cbd5e1;
-    border: 1px solid #334155;
-    border-radius: 10px;
-    backdrop-filter: blur(8px);
-    font-size: 11px;
-    display: flex; flex-wrap: wrap; gap: 8px 14px;
-    max-width: 320px;
-  }
-  .legend .it { display:flex; align-items:center; gap:4px; }
-
-  .err-banner {
-    position: fixed;
-    top: 50%; left: 50%;
-    transform: translate(-50%, -50%);
-    z-index: 2000;
-    background: #7f1d1d;
-    color: #fee2e2;
-    padding: 16px 22px;
-    border: 1px solid #ef4444;
-    border-radius: 10px;
-    font-size: 13px;
-    max-width: 420px;
-    text-align: center;
-    line-height: 1.6;
-    display: none;
-  }
+  body.light-theme .map-3d-bar button:hover { background: #f1f5f9; color: #0f172a; }
 </style>
 </head>
 <body>
-<div id="cesiumContainer"></div>
 
-<div class="top-bar">
-  <a href="index.html" class="tb-btn">← 2D 지도</a>
-  <div class="tb-info">
-    🏞️ <span id="parkName">로딩중...</span>
-    <span class="sub" id="parkMeta"></span>
+<!-- 2D와 동일한 헤더 -->
+<div class="header">
+  <div class="header-left">
+    <div class="header-icon">🌿</div>
+    <div>
+      <div class="header-title">태화강국가정원 <span>IoT 통합관제</span></div>
+      <div class="header-sub">스마트공원 시설물 관리 시스템 v1.0 · 3D</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="live-badge">
+      <div class="live-dot"></div>
+      실시간 모니터링
+    </div>
+    <div class="clock mono" id="clock"></div>
+    <a href="index.html" class="hdr-icon-btn" title="2D 지도로 돌아가기" style="text-decoration:none;">🗺️</a>
+    <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="테마 전환">🌙</button>
   </div>
 </div>
 
-<div class="preset-bar">
-  <div class="title">위성 영상</div>
-  <button id="lyr-vworld"  class="active" onclick="setBaseLayer('vworld')">🇰🇷 VWorld 위성</button>
-  <button id="lyr-vworld2" onclick="setBaseLayer('vworldBase')">🗺️ VWorld 일반</button>
-  <button id="lyr-google"  onclick="setBaseLayer('google')">🛰️ 구글 위성</button>
-  <div class="title">오버레이</div>
-  <button id="lyr-hybrid"  onclick="toggleHybrid()">🏷️ 라벨 오버레이</button>
-  <button id="lyr-holo" class="active" onclick="toggleHolo()">🌌 홀로그램 모드</button>
-  <div class="title">카메라</div>
-  <button onclick="flyOverview()">📍 전체 보기</button>
-  <button onclick="flyTop()">⬇️ 탑뷰</button>
-  <button onclick="flyTilted()">🎬 사선 45°</button>
-  <button onclick="toggleLabels()">🏷️ 시설라벨</button>
+<!-- 2D와 동일한 메인 레이아웃 -->
+<div class="main">
+  <div class="map-container">
+    <div id="map"></div>
+    <div id="cesiumContainer"></div>
+    <div class="map-controls" id="filterBar"></div>
+    <div class="add-menu hidden" id="addMenu"></div>
+    <div class="add-indicator hidden" id="addIndicator"></div>
+    <div class="stats-overlay" id="statsOverlay"></div>
+    <div class="map-3d-bar" id="map3dBar">
+      <div class="bar-title">위성 영상</div>
+      <button id="lyr-vworld"  class="active" onclick="setBaseLayer('vworld')">🇰🇷 VWorld 위성</button>
+      <button id="lyr-vworld2" onclick="setBaseLayer('vworldBase')">🗺️ VWorld 일반</button>
+      <button id="lyr-google"  onclick="setBaseLayer('google')">🛰️ 구글 위성</button>
+      <div class="bar-title">오버레이</div>
+      <button id="lyr-hybrid" onclick="toggleHybrid()">🏷️ 라벨 오버레이</button>
+      <button id="lyr-holo" class="active" onclick="toggleHolo()">🌌 홀로그램</button>
+      <div class="bar-title">카메라</div>
+      <button onclick="flyOverview()">📍 전체 보기</button>
+      <button onclick="flyTop()">⬇️ 탑뷰</button>
+      <button onclick="flyTilted()">🎬 사선 45°</button>
+    </div>
+  </div>
+
+  <div class="sidebar">
+    <div id="detailPanel">
+      <div class="select-prompt">
+        <div class="icon">📍</div>
+        <p>지도에서 시설물을 선택하면<br>상세 정보를 확인할 수 있습니다</p>
+      </div>
+    </div>
+    <div class="alert-section">
+      <div class="alert-section-header">
+        <span>🚨 경고 알림 <span class="alert-count" id="alertCount">0</span></span>
+      </div>
+      <div class="alert-list" id="alertList"></div>
+    </div>
+    <div class="overall-gauge" id="overallGauge"></div>
+  </div>
 </div>
 
-<div class="bottom-info">
-  <div><strong>VWorld 3D 위성지도</strong> · 국토교통부 공간정보오픈플랫폼</div>
-  <div>🖱️ 좌클릭 드래그: 이동 · 우클릭 드래그: 회전/기울기 · 휠: 줌</div>
-  <div id="facCount" style="margin-top:4px;"></div>
-</div>
+<!-- 2D 로직 전부 로드 (Leaflet 맵은 화면밖 은닉) -->
+<script src="js/app.js"></script>
 
-<div class="legend" id="legend"></div>
-
-<div class="err-banner" id="errBanner"></div>
-
+<!-- Cesium 3D 어댑터 -->
 <script>
 const VWORLD_API_KEY = '72E5F03C-6058-35DB-941E-C9E787A7BA99';
 
-const TYPE_CFG = {
-  bench:    { icon:'🪑', label:'벤치',         color:'#D4A017' },
-  restroom: { icon:'🚻', label:'화장실',       color:'#5DADE2' },
-  exercise: { icon:'🏋️', label:'운동기구',     color:'#EC7063' },
-  light:    { icon:'💡', label:'가로등',       color:'#F5B041' },
-  parking:  { icon:'🅿️', label:'주차장',       color:'#A569BD' },
-  bin:      { icon:'🗑️', label:'쓰레기통',     color:'#58D68D' },
-  cctv:     { icon:'📹', label:'CCTV',         color:'#22D3EE' },
-};
+// Cesium 뷰어 초기화
+Cesium.Ion.defaultAccessToken = '';
 
-function hpColor(hp) {
-  if (hp > 80) return '#22c55e';
-  if (hp > 50) return '#84cc16';
-  if (hp > 30) return '#f59e0b';
-  if (hp > 10) return '#f97316';
-  return '#ef4444';
-}
-
-// localStorage에서 데이터 로드 (2D 대시보드와 공유)
-function loadCurrentPark() {
-  try {
-    const parks = JSON.parse(localStorage.getItem('parks-list') || '[]');
-    const currentId = localStorage.getItem('current-park-id') || 'taehwa-nat';
-    const p = parks.find(x => x.id === currentId);
-    if (p) return p;
-    if (parks.length > 0) return parks[0];
-  } catch(e) {}
-  // 기본값
-  return {
-    id: 'taehwa-nat',
-    name: '태화강국가정원',
-    center: [35.5478, 129.2962],
-    boundary: [[
-      [35.5520, 129.2905],[35.5522, 129.2945],[35.5515, 129.2985],
-      [35.5500, 129.3028],[35.5480, 129.3048],[35.5455, 129.3042],
-      [35.5440, 129.3015],[35.5432, 129.2975],[35.5438, 129.2935],
-      [35.5455, 129.2905],[35.5482, 129.2892],[35.5505, 129.2895],
-    ]],
-  };
-}
-
-function loadFacilities(parkId) {
-  try {
-    const raw = localStorage.getItem(`park-${parkId}-facilities`);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
-    }
-  } catch(e) {}
-  return [];
-}
-
-function normalizeBoundaries(park) {
-  if (!park.boundary || park.boundary.length === 0) return [];
-  if (typeof park.boundary[0][0] === 'number') return [park.boundary];
-  return park.boundary;
-}
-
-const park = loadCurrentPark();
-const facilities = loadFacilities(park.id);
-const boundaries = normalizeBoundaries(park);
-
-document.getElementById('parkName').textContent = park.name;
-document.getElementById('parkMeta').textContent =
-  `· 시설 ${facilities.length}개 · 영역 ${boundaries.length}개`;
-document.getElementById('facCount').textContent = `🏷️ ${facilities.length}개 시설 로드됨`;
-
-// 범례 렌더
-const usedTypes = [...new Set(facilities.map(f => f.type))];
-const legend = document.getElementById('legend');
-if (usedTypes.length > 0) {
-  legend.innerHTML = usedTypes.map(t => {
-    const cfg = TYPE_CFG[t] || { icon:'📍', label:t, color:'#94a3b8' };
-    return `<div class="it"><span>${cfg.icon}</span><span style="color:${cfg.color};font-weight:700;">${cfg.label}</span></div>`;
-  }).join('');
-} else {
-  legend.style.display = 'none';
-}
-
-// ================= Cesium 초기화 =================
-Cesium.Ion.defaultAccessToken = ''; // Cesium Ion 불필요
-
-// 이미저리 프로바이더 팩토리
 function makeProvider(kind) {
   if (kind === 'google') {
     return new Cesium.UrlTemplateImageryProvider({
       url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
-      credit: '© Google',
-      maximumLevel: 20,
-    });
-  }
-  if (kind === 'vworld') {
-    return new Cesium.UrlTemplateImageryProvider({
-      url: `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_API_KEY}/Satellite/{z}/{y}/{x}.jpeg`,
-      credit: '© VWorld · 국토교통부',
-      maximumLevel: 19,
+      credit: '© Google', maximumLevel: 20,
     });
   }
   if (kind === 'vworldBase') {
     return new Cesium.UrlTemplateImageryProvider({
       url: `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_API_KEY}/Base/{z}/{y}/{x}.png`,
-      credit: '© VWorld · 국토교통부',
-      maximumLevel: 19,
+      credit: '© VWorld · 국토교통부', maximumLevel: 19,
     });
   }
-  return null;
+  return new Cesium.UrlTemplateImageryProvider({
+    url: `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_API_KEY}/Satellite/{z}/{y}/{x}.jpeg`,
+    credit: '© VWorld · 국토교통부', maximumLevel: 19,
+  });
 }
 
-let viewer;
-let baseLayer = null;
+const viewer = new Cesium.Viewer('cesiumContainer', {
+  imageryProvider: makeProvider('vworld'),
+  baseLayerPicker: false, geocoder: false, homeButton: false,
+  sceneModePicker: false, navigationHelpButton: false,
+  animation: false, timeline: false, fullscreenButton: false,
+  infoBox: true, selectionIndicator: true,
+  terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+});
+let baseLayer = viewer.imageryLayers.get(0);
 let hybridLayer = null;
 let hybridVisible = false;
+viewer.scene.globe.enableLighting = false;
+viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#0b1220');
+const credit = viewer._cesiumWidget._creditContainer;
+if (credit) credit.style.display = 'none';
 
-try {
-  viewer = new Cesium.Viewer('cesiumContainer', {
-    imageryProvider: makeProvider('vworld'),
-    baseLayerPicker: false,
-    geocoder: false,
-    homeButton: false,
-    sceneModePicker: false,
-    navigationHelpButton: false,
-    animation: false,
-    timeline: false,
-    fullscreenButton: false,
-    infoBox: true,
-    selectionIndicator: true,
-    terrainProvider: new Cesium.EllipsoidTerrainProvider(),
-  });
-  baseLayer = viewer.imageryLayers.get(0);
-  viewer.scene.globe.enableLighting = false;
-  viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#0b1220');
-
-  const credit = viewer._cesiumWidget._creditContainer;
-  if (credit) credit.style.display = 'none';
-} catch(e) {
-  document.getElementById('errBanner').style.display = 'block';
-  document.getElementById('errBanner').innerHTML =
-    `Cesium 초기화 실패: ${e.message}`;
-  throw e;
-}
-
-// 베이스 레이어 전환
 function setBaseLayer(kind) {
   const provider = makeProvider(kind);
-  if (!provider) return;
-  // 기존 베이스 제거, 신규 추가 (최하단에)
   const layers = viewer.imageryLayers;
   if (baseLayer) layers.remove(baseLayer, false);
   baseLayer = layers.addImageryProvider(provider, 0);
-  // 버튼 active 토글
   ['vworld','vworldBase','google'].forEach(k => {
     const el = document.getElementById('lyr-' + (k === 'vworldBase' ? 'vworld2' : k));
     if (el) el.classList.toggle('active', k === kind);
   });
+  applyHoloTone();
 }
 
-// 하이브리드(라벨) 오버레이 토글
 function toggleHybrid() {
   if (hybridVisible) {
     if (hybridLayer) { viewer.imageryLayers.remove(hybridLayer, false); hybridLayer = null; }
@@ -332,90 +206,62 @@ function toggleHybrid() {
   if (btn) btn.classList.toggle('active', hybridVisible);
 }
 
-const [centerLat, centerLng] = park.center;
-const viewHeight = 2200;
-
-function flyOverview() {
-  viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(centerLng, centerLat, viewHeight),
-    orientation: {
-      heading: Cesium.Math.toRadians(0),
-      pitch: Cesium.Math.toRadians(-55),
-      roll: 0,
-    },
-    duration: 1.6,
-  });
+// 홀로그램 모드
+let holoMode = true;
+const TYPE_CFG_3D = {
+  bench:    { icon:'🪑', color:'#D4A017' },
+  restroom: { icon:'🚻', color:'#5DADE2' },
+  exercise: { icon:'🏋️', color:'#EC7063' },
+  light:    { icon:'💡', color:'#F5B041' },
+  parking:  { icon:'🅿️', color:'#A569BD' },
+  bin:      { icon:'🗑️', color:'#58D68D' },
+  cctv:     { icon:'📹', color:'#22D3EE' },
+};
+function hpColor3D(hp) {
+  if (hp > 80) return '#22c55e';
+  if (hp > 50) return '#84cc16';
+  if (hp > 30) return '#f59e0b';
+  if (hp > 10) return '#f97316';
+  return '#ef4444';
 }
-function flyTop() {
-  viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(centerLng, centerLat, viewHeight),
-    orientation: {
-      heading: Cesium.Math.toRadians(0),
-      pitch: Cesium.Math.toRadians(-89),
-      roll: 0,
-    },
-    duration: 1.4,
-  });
-}
-function flyTilted() {
-  viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(centerLng, centerLat - 0.01, 1500),
-    orientation: {
-      heading: Cesium.Math.toRadians(0),
-      pitch: Cesium.Math.toRadians(-35),
-      roll: 0,
-    },
-    duration: 1.8,
-  });
+function beamColor3D(hp) {
+  if (hp > 50) return '#22d3ee';
+  if (hp > 30) return '#f59e0b';
+  return '#ef4444';
 }
 
-// 초기 시점: 사선 45° (빔이 잘 보이도록)
-setTimeout(() => {
-  viewer.camera.flyTo({
-    destination: Cesium.Cartesian3.fromDegrees(centerLng, centerLat - 0.006, 1200),
-    orientation: {
-      heading: Cesium.Math.toRadians(0),
-      pitch: Cesium.Math.toRadians(-40),
-      roll: 0,
-    },
-    duration: 2.0,
-  });
-}, 100);
+// 엔티티 저장소 (ID -> 엔티티 배열)
+const entityMap = new Map(); // facilityId -> [marker, beam, pad, label]
+const boundaryEntities = [];
 
-// ================= 홀로그램 모드 상태 =================
-let holoMode = true;           // 기본: 미래적 홀로그램 모드
-let labelsVisible = true;
-let boundaryEntities = [];
-let markerEntities = [];
-let beamEntities = [];
-let basePadEntities = [];
-
-function beamColor(hp) {
-  if (hp > 50) return '#22d3ee';  // 사이언
-  if (hp > 30) return '#f59e0b';  // 주황 경고
-  return '#ef4444';               // 빨강 위험
+function applyHoloTone() {
+  if (!baseLayer) return;
+  if (holoMode) {
+    baseLayer.brightness = 0.6;
+    baseLayer.contrast = 1.3;
+    baseLayer.saturation = 0.6;
+  } else {
+    baseLayer.brightness = 1.0;
+    baseLayer.contrast = 1.0;
+    baseLayer.saturation = 1.0;
+  }
 }
 
-// ================= 홀로그램 마커 캔버스 =================
 function buildHoloCanvas(f) {
-  const cfg = TYPE_CFG[f.type] || { icon:'📍', color:'#22d3ee' };
+  const cfg = TYPE_CFG_3D[f.type] || { icon:'📍', color:'#22d3ee' };
   const hp = f.hp || 0;
-  const main = beamColor(hp);
+  const main = beamColor3D(hp);
   const size = 96;
   const canvas = document.createElement('canvas');
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
   const cx = size/2, cy = size/2;
-
-  // 외곽 글로우
   const glow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 46);
   glow.addColorStop(0, main + 'aa');
   glow.addColorStop(0.6, main + '33');
   glow.addColorStop(1, main + '00');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, size, size);
-
-  // 외곽 팔각 링 (사이버 느낌)
   ctx.strokeStyle = main;
   ctx.lineWidth = 2;
   ctx.shadowColor = main;
@@ -430,8 +276,6 @@ function buildHoloCanvas(f) {
   ctx.closePath();
   ctx.stroke();
   ctx.shadowBlur = 0;
-
-  // 내부 어두운 배경
   ctx.fillStyle = 'rgba(8, 20, 32, 0.85)';
   ctx.beginPath();
   for (let i = 0; i < 8; i++) {
@@ -442,25 +286,19 @@ function buildHoloCanvas(f) {
   }
   ctx.closePath();
   ctx.fill();
-
-  // 아이콘
   ctx.font = '28px sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.fillText(cfg.icon, cx, cy - 2);
-
-  // 하단 작은 인디케이터 바
   ctx.fillStyle = main;
   ctx.fillRect(cx - 14, cy + 22, 28 * (hp/100), 2);
   ctx.strokeStyle = main + '55';
   ctx.lineWidth = 1;
   ctx.strokeRect(cx - 14, cy + 22, 28, 2);
-
   return canvas.toDataURL();
 }
 
-// 바닥 베이스 패드 캔버스 (빔 뿌리의 원형 글로우)
-function buildBasePadCanvas(main) {
+function buildBasePad(main) {
   const size = 64;
   const canvas = document.createElement('canvas');
   canvas.width = size; canvas.height = size;
@@ -473,7 +311,6 @@ function buildBasePadCanvas(main) {
   ctx.beginPath();
   ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2);
   ctx.fill();
-  // 링
   ctx.strokeStyle = main;
   ctx.lineWidth = 1.5;
   ctx.beginPath();
@@ -482,193 +319,10 @@ function buildBasePadCanvas(main) {
   return canvas.toDataURL();
 }
 
-// ================= 공원 경계 렌더 =================
-function renderBoundaries() {
-  boundaryEntities.forEach(e => viewer.entities.remove(e));
-  boundaryEntities = [];
-  const color = holoMode ? '#22d3ee' : '#3b82f6';
-  const fill = holoMode ? 0.08 : 0.22;
-  const outlineOnly = holoMode ? false : false;
-  boundaries.forEach((poly, idx) => {
-    if (!poly || poly.length < 3) return;
-    const flat = [];
-    poly.forEach(pt => { flat.push(pt[1], pt[0]); });
-    const ent = viewer.entities.add({
-      name: `${park.name} 경계 ${idx + 1}`,
-      polygon: {
-        hierarchy: Cesium.Cartesian3.fromDegreesArray(flat),
-        material: Cesium.Color.fromCssColorString(color).withAlpha(fill),
-        outline: true,
-        outlineColor: Cesium.Color.fromCssColorString(color),
-        outlineWidth: 3,
-        height: 0,
-        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-      },
-    });
-    boundaryEntities.push(ent);
-
-    // 홀로그램 모드일 때 경계 따라 글로우 폴리라인 추가 (네온 효과)
-    if (holoMode) {
-      const closed = flat.slice();
-      closed.push(flat[0], flat[1]);
-      const line = viewer.entities.add({
-        polyline: {
-          positions: Cesium.Cartesian3.fromDegreesArray(closed),
-          width: 5,
-          clampToGround: true,
-          material: new Cesium.PolylineGlowMaterialProperty({
-            glowPower: 0.35,
-            taperPower: 1.0,
-            color: Cesium.Color.fromCssColorString('#22d3ee'),
-          }),
-        },
-      });
-      boundaryEntities.push(line);
-    }
-  });
-}
-
-// ================= 시설 마커 렌더 =================
-function clearMarkers() {
-  markerEntities.forEach(e => viewer.entities.remove(e));
-  beamEntities.forEach(e => viewer.entities.remove(e));
-  basePadEntities.forEach(e => viewer.entities.remove(e));
-  markerEntities = [];
-  beamEntities = [];
-  basePadEntities = [];
-}
-
-function renderMarkers() {
-  clearMarkers();
-  const beamHeight = 60; // 지상 60m
-
-  facilities.forEach(f => {
-    if (f.lat == null || f.lng == null) return;
-    const cfg = TYPE_CFG[f.type] || { icon:'📍', label:f.type, color:'#22d3ee' };
-    const hp = f.hp || 0;
-
-    if (holoMode) {
-      const color = beamColor(hp);
-
-      // 바닥 글로우 패드 (원형)
-      const pad = viewer.entities.add({
-        position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, 0.5),
-        billboard: {
-          image: buildBasePadCanvas(color),
-          verticalOrigin: Cesium.VerticalOrigin.CENTER,
-          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-          scale: 0.6,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        },
-      });
-      basePadEntities.push(pad);
-
-      // 글로우 빔 (지면 → 60m)
-      const beam = viewer.entities.add({
-        polyline: {
-          positions: Cesium.Cartesian3.fromDegreesArrayHeights([
-            f.lng, f.lat, 0,
-            f.lng, f.lat, beamHeight,
-          ]),
-          width: 4,
-          material: new Cesium.PolylineGlowMaterialProperty({
-            glowPower: 0.35,
-            taperPower: 0.2,
-            color: Cesium.Color.fromCssColorString(color),
-          }),
-          arcType: Cesium.ArcType.NONE,
-        },
-      });
-      beamEntities.push(beam);
-
-      // 떠있는 홀로그램 마커
-      const marker = viewer.entities.add({
-        name: f.name,
-        position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, beamHeight),
-        billboard: {
-          image: buildHoloCanvas(f),
-          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-          scale: 0.75,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        },
-        // HP 수치
-        label: {
-          text: `${hp}`,
-          font: 'bold 22px "JetBrains Mono", monospace',
-          fillColor: Cesium.Color.fromCssColorString(color),
-          outlineColor: Cesium.Color.BLACK,
-          outlineWidth: 4,
-          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          pixelOffset: new Cesium.Cartesian2(0, -105),
-          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 5000),
-        },
-        description: facilityDescription(f, cfg),
-      });
-      markerEntities.push(marker);
-
-      // 시설 이름은 별도 라벨 (아래쪽)
-      const nameLabel = viewer.entities.add({
-        position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, beamHeight),
-        label: {
-          text: f.name,
-          font: 'bold 11px "Noto Sans KR", sans-serif',
-          fillColor: Cesium.Color.WHITE,
-          outlineColor: Cesium.Color.fromCssColorString('#0c1322'),
-          outlineWidth: 3,
-          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          showBackground: true,
-          backgroundColor: Cesium.Color.fromCssColorString('#0c1322').withAlpha(0.85),
-          backgroundPadding: new Cesium.Cartesian2(6, 3),
-          pixelOffset: new Cesium.Cartesian2(0, -48),
-          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2500),
-        },
-      });
-      markerEntities.push(nameLabel);
-
-    } else {
-      // 일반 모드 (지상 클램프 마커)
-      const entity = viewer.entities.add({
-        name: f.name,
-        position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, 2),
-        billboard: {
-          image: buildLegacyMarkerCanvas(f),
-          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-          scale: 0.7,
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-        },
-        label: {
-          text: f.name,
-          font: 'bold 11px "Noto Sans KR", sans-serif',
-          fillColor: Cesium.Color.WHITE,
-          outlineColor: Cesium.Color.fromCssColorString('#0c1322'),
-          outlineWidth: 3,
-          style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-          showBackground: true,
-          backgroundColor: Cesium.Color.fromCssColorString('#0c1322').withAlpha(0.88),
-          backgroundPadding: new Cesium.Cartesian2(7, 4),
-          pixelOffset: new Cesium.Cartesian2(0, -66),
-          scale: 0.95,
-          heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-          distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3500),
-          disableDepthTestDistance: Number.POSITIVE_INFINITY,
-          verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-        },
-        description: facilityDescription(f, cfg),
-      });
-      markerEntities.push(entity);
-    }
-  });
-}
-
-function buildLegacyMarkerCanvas(f) {
-  const cfg = TYPE_CFG[f.type] || { icon:'📍', color:'#94a3b8' };
+function buildLegacyCanvas(f) {
+  const cfg = TYPE_CFG_3D[f.type] || { icon:'📍', color:'#94a3b8' };
   const hp = f.hp || 0;
-  const hpC = hpColor(hp);
+  const hpC = hpColor3D(hp);
   const canvas = document.createElement('canvas');
   canvas.width = 72; canvas.height = 88;
   const ctx = canvas.getContext('2d');
@@ -695,52 +349,269 @@ function buildLegacyMarkerCanvas(f) {
   return canvas.toDataURL();
 }
 
-function facilityDescription(f, cfg) {
-  return `
-    <table style="font-family:'Noto Sans KR',sans-serif; color:#0f172a;">
-      <tr><td style="padding:4px 10px 4px 0;color:#64748b;">ID</td><td style="font-family:monospace;">${f.id}</td></tr>
-      <tr><td style="padding:4px 10px 4px 0;color:#64748b;">유형</td><td>${cfg.icon} ${cfg.label}</td></tr>
-      <tr><td style="padding:4px 10px 4px 0;color:#64748b;">구역</td><td>${f.zone || '-'}</td></tr>
-      <tr><td style="padding:4px 10px 4px 0;color:#64748b;">HP</td><td style="font-family:monospace;">${f.hp || 0} / ${f.maxHp || 100}</td></tr>
-      <tr><td style="padding:4px 10px 4px 0;color:#64748b;">설치일</td><td>${f.installed || '-'}</td></tr>
-      <tr><td style="padding:4px 10px 4px 0;color:#64748b;">마지막 점검</td><td>${f.lastCheck || '-'}</td></tr>
-    </table>`;
+function clearAllEntities() {
+  entityMap.forEach(arr => arr.forEach(e => viewer.entities.remove(e)));
+  entityMap.clear();
+  boundaryEntities.forEach(e => viewer.entities.remove(e));
+  boundaryEntities.length = 0;
 }
 
-// 홀로그램 모드일 때 위성 영상 어둡게 (사이버 분위기)
-function applyHoloTone() {
-  if (!baseLayer) return;
-  if (holoMode) {
-    baseLayer.brightness = 0.55;
-    baseLayer.contrast = 1.35;
-    baseLayer.saturation = 0.55;
-    baseLayer.hue = 0;
-  } else {
-    baseLayer.brightness = 1.0;
-    baseLayer.contrast = 1.0;
-    baseLayer.saturation = 1.0;
-    baseLayer.hue = 0;
+function render3DBoundary() {
+  boundaryEntities.forEach(e => viewer.entities.remove(e));
+  boundaryEntities.length = 0;
+  const park = getCurrentPark();
+  const polygons = park.boundary || [];
+  const color = holoMode ? '#22d3ee' : '#3b82f6';
+  const fill = holoMode ? 0.08 : 0.20;
+  polygons.forEach((poly, idx) => {
+    if (!poly || poly.length < 3) return;
+    const flat = [];
+    poly.forEach(pt => { flat.push(pt[1], pt[0]); });
+    const p = viewer.entities.add({
+      polygon: {
+        hierarchy: Cesium.Cartesian3.fromDegreesArray(flat),
+        material: Cesium.Color.fromCssColorString(color).withAlpha(fill),
+        outline: true,
+        outlineColor: Cesium.Color.fromCssColorString(color),
+        outlineWidth: 3,
+        height: 0,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      },
+    });
+    boundaryEntities.push(p);
+    if (holoMode) {
+      const closed = flat.slice();
+      closed.push(flat[0], flat[1]);
+      boundaryEntities.push(viewer.entities.add({
+        polyline: {
+          positions: Cesium.Cartesian3.fromDegreesArray(closed),
+          width: 5, clampToGround: true,
+          material: new Cesium.PolylineGlowMaterialProperty({
+            glowPower: 0.35, taperPower: 1.0,
+            color: Cesium.Color.fromCssColorString('#22d3ee'),
+          }),
+        },
+      }));
+    }
+  });
+}
+
+function renderFacility3D(f) {
+  // 기존 엔티티 제거
+  if (entityMap.has(f.id)) {
+    entityMap.get(f.id).forEach(e => viewer.entities.remove(e));
+    entityMap.delete(f.id);
   }
+  if (f.lat == null || f.lng == null) return;
+  const entities = [];
+  const cfg = TYPE_CFG_3D[f.type] || { icon:'📍', color:'#94a3b8' };
+  const hp = f.hp || 0;
+
+  function tag(e) { e.facilityId = f.id; return e; }
+
+  if (holoMode) {
+    const color = beamColor3D(hp);
+    entities.push(tag(viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, 0.5),
+      billboard: {
+        image: buildBasePad(color),
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        scale: 0.6,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    })));
+    entities.push(tag(viewer.entities.add({
+      polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArrayHeights([f.lng, f.lat, 0, f.lng, f.lat, 60]),
+        width: 4,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          glowPower: 0.35, taperPower: 0.2,
+          color: Cesium.Color.fromCssColorString(color),
+        }),
+        arcType: Cesium.ArcType.NONE,
+      },
+    })));
+    entities.push(tag(viewer.entities.add({
+      name: f.name,
+      position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, 60),
+      billboard: {
+        image: buildHoloCanvas(f),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        scale: 0.75,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: `${hp}`,
+        font: 'bold 22px "JetBrains Mono", monospace',
+        fillColor: Cesium.Color.fromCssColorString(color),
+        outlineColor: Cesium.Color.BLACK, outlineWidth: 4,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset: new Cesium.Cartesian2(0, -105),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 5000),
+      },
+    })));
+    entities.push(tag(viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, 60),
+      label: {
+        text: f.name,
+        font: 'bold 11px "Noto Sans KR", sans-serif',
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.fromCssColorString('#0c1322'),
+        outlineWidth: 3,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString('#0c1322').withAlpha(0.85),
+        backgroundPadding: new Cesium.Cartesian2(6, 3),
+        pixelOffset: new Cesium.Cartesian2(0, -48),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2500),
+      },
+    })));
+  } else {
+    entities.push(tag(viewer.entities.add({
+      name: f.name,
+      position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, 2),
+      billboard: {
+        image: buildLegacyCanvas(f),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        scale: 0.7,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: f.name,
+        font: 'bold 11px "Noto Sans KR", sans-serif',
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.fromCssColorString('#0c1322'),
+        outlineWidth: 3,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString('#0c1322').withAlpha(0.88),
+        backgroundPadding: new Cesium.Cartesian2(7, 4),
+        pixelOffset: new Cesium.Cartesian2(0, -66),
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3500),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      },
+    })));
+  }
+
+  entityMap.set(f.id, entities);
+}
+
+function render3DAllMarkers(filter) {
+  // 기존 마커 제거 (경계는 유지)
+  entityMap.forEach(arr => arr.forEach(e => viewer.entities.remove(e)));
+  entityMap.clear();
+  const list = filter === 'all' ? FACILITIES
+    : filter === 'alert' ? FACILITIES.filter(f => f.hp <= 30)
+    : FACILITIES.filter(f => f.type === filter);
+  list.forEach(f => renderFacility3D(f));
+}
+
+// ================= app.js 함수 훅킹 =================
+const _origAddMarkers = window.addMarkers;
+window.addMarkers = function(filter) {
+  if (typeof _origAddMarkers === 'function') _origAddMarkers(filter);
+  render3DAllMarkers(filter);
+};
+
+const _origSelectFacility = window.selectFacility;
+window.selectFacility = function(id) {
+  if (typeof _origSelectFacility === 'function') _origSelectFacility(id);
+  const f = (typeof FACILITIES !== 'undefined' ? FACILITIES : []).find(x => x.id === id);
+  if (f && f.lat != null && f.lng != null) {
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(f.lng, f.lat - 0.001, 180),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-45),
+        roll: 0,
+      },
+      duration: 1.4,
+    });
+  }
+};
+
+const _origSwitchPark = window.switchPark;
+window.switchPark = function(pid) {
+  if (typeof _origSwitchPark === 'function') _origSwitchPark(pid);
+  const park = getCurrentPark();
+  render3DBoundary();
+  render3DAllMarkers(typeof currentFilter !== 'undefined' ? currentFilter : 'all');
+  // 카메라 이동
+  const allPts = park.boundary && park.boundary.length ? park.boundary.reduce((a, p) => a.concat(p || []), []) : [];
+  if (allPts.length >= 3) {
+    const lats = allPts.map(p => p[0]);
+    const lngs = allPts.map(p => p[1]);
+    const rect = Cesium.Rectangle.fromDegrees(
+      Math.min(...lngs), Math.min(...lats),
+      Math.max(...lngs), Math.max(...lats)
+    );
+    viewer.camera.flyTo({ destination: rect, duration: 1.4 });
+  } else if (park.center) {
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(park.center[1], park.center[0], 2000),
+      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-50), roll: 0 },
+      duration: 1.4,
+    });
+  }
+};
+
+// Cesium 클릭 → 2D selectFacility 트리거
+viewer.screenSpaceEventHandler.setInputAction((click) => {
+  const picked = viewer.scene.pick(click.position);
+  if (picked && picked.id && picked.id.facilityId) {
+    window.selectFacility(picked.id.facilityId);
+  }
+}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+// ================= 카메라 프리셋 =================
+function flyOverview() {
+  const park = getCurrentPark();
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(park.center[1], park.center[0] - 0.006, 1500),
+    orientation: { heading: 0, pitch: Cesium.Math.toRadians(-45), roll: 0 },
+    duration: 1.4,
+  });
+}
+function flyTop() {
+  const park = getCurrentPark();
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(park.center[1], park.center[0], 2000),
+    orientation: { heading: 0, pitch: Cesium.Math.toRadians(-89), roll: 0 },
+    duration: 1.2,
+  });
+}
+function flyTilted() {
+  const park = getCurrentPark();
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(park.center[1], park.center[0] - 0.008, 1200),
+    orientation: { heading: 0, pitch: Cesium.Math.toRadians(-35), roll: 0 },
+    duration: 1.6,
+  });
 }
 
 function toggleHolo() {
   holoMode = !holoMode;
-  renderBoundaries();
-  renderMarkers();
+  render3DBoundary();
+  render3DAllMarkers(typeof currentFilter !== 'undefined' ? currentFilter : 'all');
   applyHoloTone();
   const btn = document.getElementById('lyr-holo');
   if (btn) btn.classList.toggle('active', holoMode);
 }
 
-// 초기 렌더
-renderBoundaries();
-renderMarkers();
-applyHoloTone();
-
-function toggleLabels() {
-  labelsVisible = !labelsVisible;
-  markerEntities.forEach(e => { if (e.label) e.label.show = labelsVisible; });
-}
+// 초기 렌더: app.js 초기화 직후 한 번 더
+setTimeout(() => {
+  render3DBoundary();
+  render3DAllMarkers('all');
+  applyHoloTone();
+  flyOverview();
+}, 300);
 </script>
 </body>
 </html>
