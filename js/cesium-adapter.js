@@ -23,14 +23,15 @@ function makeProvider(kind) {
 }
 
 const viewer = new Cesium.Viewer('cesiumContainer', {
-  imageryProvider: makeProvider('vworld'),
   baseLayerPicker: false, geocoder: false, homeButton: false,
   sceneModePicker: false, navigationHelpButton: false,
   animation: false, timeline: false, fullscreenButton: false,
   infoBox: true, selectionIndicator: true,
   terrainProvider: new Cesium.EllipsoidTerrainProvider(),
 });
-let baseLayer = viewer.imageryLayers.get(0);
+// 기본 레이어 전부 제거 후 VWorld 위성으로 명시 교체
+viewer.imageryLayers.removeAll();
+let baseLayer = viewer.imageryLayers.addImageryProvider(makeProvider('vworld'));
 let hybridLayer = null;
 let hybridVisible = false;
 viewer.scene.globe.enableLighting = false;
