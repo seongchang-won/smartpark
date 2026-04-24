@@ -1292,6 +1292,38 @@ handler.setInputAction((click) => {
     return;
   }
 
+  // ── 시설물 배치 모드 ──────────────────────────────────────────
+  if (typeof addMode !== 'undefined' && addMode) {
+    const cart = viewer.camera.pickEllipsoid(click.position, viewer.scene.globe.ellipsoid);
+    if (!cart) return;
+    const c = Cesium.Cartographic.fromCartesian(cart);
+    const lat = Cesium.Math.toDegrees(c.latitude);
+    const lng = Cesium.Math.toDegrees(c.longitude);
+    // app.js의 시설 추가 로직 재사용
+    const cfg = (typeof TYPE_CFG !== 'undefined') ? TYPE_CFG[addMode] : null;
+    if (!cfg) return;
+    const today = new Date().toISOString().slice(0, 10);
+    const prefix = (typeof ID_PREFIX !== 'undefined') ? ID_PREFIX[addMode] : addMode.slice(0,2).toUpperCase();
+    const seq = String((typeof FACILITIES !== 'undefined' ? FACILITIES : []).filter(f => f.type === addMode).length + 1).padStart(3, '0');
+    const newFacility = {
+      id: `${prefix}${seq}-${String(Date.now()).slice(-3)}`,
+      name: `신규 ${cfg.label}`,
+      type: addMode,
+      zone: '기타',
+      hp: 100,
+      maxHp: 100,
+      installed: today,
+      lastCheck: today,
+      lat,
+      lng,
+    };
+    if (typeof FACILITIES !== 'undefined') FACILITIES.push(newFacility);
+    if (typeof saveFacilities === 'function') saveFacilities();
+    if (typeof exitAddMode === 'function') exitAddMode();
+    if (typeof refreshAll === 'function') refreshAll();
+    return;
+  }
+
   // ── 시설물 선택 ───────────────────────────────────────────────
   if (picked && picked.id && picked.id.facilityId) {
     if (holoActionsEl && holoActionsForId !== picked.id.facilityId) hideMarkerActions();
