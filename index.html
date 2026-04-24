@@ -247,6 +247,34 @@ function applyHoloTone() {
   }
 }
 
+// HP 수치를 글로우가 있는 canvas 이미지로 생성
+function buildHpGlowCanvas(hp, color) {
+  const size = 120;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size * 0.6;
+  const ctx = canvas.getContext('2d');
+  const cx = canvas.width / 2;
+  const cy = canvas.height / 2;
+  ctx.font = 'bold 28px "JetBrains Mono", monospace';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  // 바깥 글로우 (큰 blur)
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 18;
+  ctx.fillStyle = color;
+  ctx.fillText(`${hp}`, cx, cy);
+  // 중간 글로우 강화 (중첩)
+  ctx.shadowBlur = 10;
+  ctx.fillText(`${hp}`, cx, cy);
+  ctx.shadowBlur = 6;
+  ctx.fillText(`${hp}`, cx, cy);
+  // 중심 샤프 텍스트 (흰색 코어)
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(`${hp}`, cx, cy);
+  return canvas.toDataURL();
+}
+
 // Emoji를 단색 네온으로 틴트 처리 (source-in 합성)
 function drawTintedEmoji(ctx, emoji, cx, cy, fontSize, tintColor) {
   const s = Math.ceil(fontSize * 1.8);
@@ -502,14 +530,16 @@ function renderFacility3D(f) {
         scale: 0.75,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
       },
-      label: {
-        text: `${hp}`,
-        font: 'bold 22px "JetBrains Mono", monospace',
-        fillColor: Cesium.Color.fromCssColorString(color),
-        outlineColor: Cesium.Color.BLACK, outlineWidth: 4,
-        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-        pixelOffset: new Cesium.Cartesian2(0, -105),
-        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+    })));
+
+    // HP 수치 (글로우 캔버스 빌보드)
+    entities.push(tag(viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, 60),
+      billboard: {
+        image: buildHpGlowCanvas(hp, color),
+        verticalOrigin: Cesium.VerticalOrigin.CENTER,
+        pixelOffset: new Cesium.Cartesian2(0, -100),
+        scale: 0.8,
         disableDepthTestDistance: Number.POSITIVE_INFINITY,
         distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 5000),
       },
