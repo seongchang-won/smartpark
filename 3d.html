@@ -55,10 +55,19 @@
     cursor: pointer;
     font-family: 'Noto Sans KR', sans-serif;
     backdrop-filter: blur(6px);
-    min-width: 96px;
+    min-width: 116px;
     text-align: left;
   }
   .preset-bar button:hover { background: rgba(30,41,59,0.95); color: #fff; }
+  .preset-bar button.active { background: rgba(34,211,238,0.25); border-color: #22d3ee; color: #fff; }
+  .preset-bar .sep {
+    height: 1px; background: #334155; margin: 2px 0;
+  }
+  .preset-bar .title {
+    font-size: 9px; color: #64748b;
+    padding: 2px 4px; margin-top: 4px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
 
   .bottom-info {
     position: fixed;
@@ -122,10 +131,18 @@
 </div>
 
 <div class="preset-bar">
+  <div class="title">위성 영상</div>
+  <button id="lyr-esri"    class="active" onclick="setBaseLayer('esri')">🌍 ESRI 위성</button>
+  <button id="lyr-vworld"  onclick="setBaseLayer('vworld')">🇰🇷 VWorld 위성</button>
+  <button id="lyr-vworld2" onclick="setBaseLayer('vworldBase')">🗺️ VWorld 일반</button>
+  <button id="lyr-google"  onclick="setBaseLayer('google')">🛰️ 구글 위성</button>
+  <div class="title">오버레이</div>
+  <button id="lyr-hybrid"  onclick="toggleHybrid()">🏷️ 라벨 오버레이</button>
+  <div class="title">카메라</div>
   <button onclick="flyOverview()">📍 전체 보기</button>
-  <button onclick="flyTop()">🛰️ 탑뷰</button>
+  <button onclick="flyTop()">⬇️ 탑뷰</button>
   <button onclick="flyTilted()">🎬 사선 45°</button>
-  <button onclick="toggleLabels()">🏷️ 라벨 토글</button>
+  <button onclick="toggleLabels()">🏷️ 시설라벨</button>
 </div>
 
 <div class="bottom-info">
@@ -220,23 +237,50 @@ if (usedTypes.length > 0) {
   legend.style.display = 'none';
 }
 
-// ================= Cesium + VWorld 초기화 =================
+// ================= Cesium 초기화 =================
 Cesium.Ion.defaultAccessToken = ''; // Cesium Ion 불필요
 
-let viewer;
-try {
-  const vworldSat = new Cesium.UrlTemplateImageryProvider({
-    url: `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_API_KEY}/Satellite/{z}/{y}/{x}.jpeg`,
-    credit: '© VWorld · 국토교통부 공간정보오픈플랫폼',
-    maximumLevel: 19,
-  });
-  const vworldHybrid = new Cesium.UrlTemplateImageryProvider({
-    url: `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_API_KEY}/Hybrid/{z}/{y}/{x}.png`,
-    maximumLevel: 19,
-  });
+// 이미저리 프로바이더 팩토리
+function makeProvider(kind) {
+  if (kind === 'esri') {
+    return new Cesium.UrlTemplateImageryProvider({
+      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      credit: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics',
+      maximumLevel: 19,
+    });
+  }
+  if (kind === 'google') {
+    return new Cesium.UrlTemplateImageryProvider({
+      url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+      credit: '© Google',
+      maximumLevel: 20,
+    });
+  }
+  if (kind === 'vworld') {
+    return new Cesium.UrlTemplateImageryProvider({
+      url: `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_API_KEY}/Satellite/{z}/{y}/{x}.jpeg`,
+      credit: '© VWorld · 국토교통부',
+      maximumLevel: 19,
+    });
+  }
+  if (kind === 'vworldBase') {
+    return new Cesium.UrlTemplateImageryProvider({
+      url: `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_API_KEY}/Base/{z}/{y}/{x}.png`,
+      credit: '© VWorld · 국토교통부',
+      maximumLevel: 19,
+    });
+  }
+  return null;
+}
 
+let viewer;
+let baseLayer = null;
+let hybridLayer = null;
+let hybridVisible = false;
+
+try {
   viewer = new Cesium.Viewer('cesiumContainer', {
-    imageryProvider: vworldSat,
+    imageryProvider: makeProvider('esri'),
     baseLayerPicker: false,
     geocoder: false,
     homeButton: false,
@@ -249,19 +293,50 @@ try {
     selectionIndicator: true,
     terrainProvider: new Cesium.EllipsoidTerrainProvider(),
   });
-  viewer.imageryLayers.addImageryProvider(vworldHybrid);
+  baseLayer = viewer.imageryLayers.get(0);
   viewer.scene.globe.enableLighting = false;
   viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#0b1220');
 
-  // 로고/credits 숨김 보강
   const credit = viewer._cesiumWidget._creditContainer;
   if (credit) credit.style.display = 'none';
 } catch(e) {
   document.getElementById('errBanner').style.display = 'block';
   document.getElementById('errBanner').innerHTML =
-    `Cesium 초기화 실패: ${e.message}<br><br>` +
-    `VWorld API 키 또는 도메인 등록을 확인하세요.`;
+    `Cesium 초기화 실패: ${e.message}`;
   throw e;
+}
+
+// 베이스 레이어 전환
+function setBaseLayer(kind) {
+  const provider = makeProvider(kind);
+  if (!provider) return;
+  // 기존 베이스 제거, 신규 추가 (최하단에)
+  const layers = viewer.imageryLayers;
+  if (baseLayer) layers.remove(baseLayer, false);
+  baseLayer = layers.addImageryProvider(provider, 0);
+  // 버튼 active 토글
+  ['esri','vworld','vworldBase','google'].forEach(k => {
+    const el = document.getElementById('lyr-' + (k === 'vworldBase' ? 'vworld2' : k));
+    if (el) el.classList.toggle('active', k === kind);
+  });
+}
+
+// 하이브리드(라벨) 오버레이 토글
+function toggleHybrid() {
+  if (hybridVisible) {
+    if (hybridLayer) { viewer.imageryLayers.remove(hybridLayer, false); hybridLayer = null; }
+    hybridVisible = false;
+  } else {
+    hybridLayer = viewer.imageryLayers.addImageryProvider(
+      new Cesium.UrlTemplateImageryProvider({
+        url: `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_API_KEY}/Hybrid/{z}/{y}/{x}.png`,
+        maximumLevel: 19,
+      })
+    );
+    hybridVisible = true;
+  }
+  const btn = document.getElementById('lyr-hybrid');
+  if (btn) btn.classList.toggle('active', hybridVisible);
 }
 
 const [centerLat, centerLng] = park.center;
