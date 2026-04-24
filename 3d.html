@@ -132,8 +132,7 @@
 
 <div class="preset-bar">
   <div class="title">위성 영상</div>
-  <button id="lyr-esri"    class="active" onclick="setBaseLayer('esri')">🌍 ESRI 위성</button>
-  <button id="lyr-vworld"  onclick="setBaseLayer('vworld')">🇰🇷 VWorld 위성</button>
+  <button id="lyr-vworld"  class="active" onclick="setBaseLayer('vworld')">🇰🇷 VWorld 위성</button>
   <button id="lyr-vworld2" onclick="setBaseLayer('vworldBase')">🗺️ VWorld 일반</button>
   <button id="lyr-google"  onclick="setBaseLayer('google')">🛰️ 구글 위성</button>
   <div class="title">오버레이</div>
@@ -242,13 +241,6 @@ Cesium.Ion.defaultAccessToken = ''; // Cesium Ion 불필요
 
 // 이미저리 프로바이더 팩토리
 function makeProvider(kind) {
-  if (kind === 'esri') {
-    return new Cesium.UrlTemplateImageryProvider({
-      url: 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      credit: 'Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics',
-      maximumLevel: 19,
-    });
-  }
   if (kind === 'google') {
     return new Cesium.UrlTemplateImageryProvider({
       url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
@@ -280,7 +272,7 @@ let hybridVisible = false;
 
 try {
   viewer = new Cesium.Viewer('cesiumContainer', {
-    imageryProvider: makeProvider('esri'),
+    imageryProvider: makeProvider('vworld'),
     baseLayerPicker: false,
     geocoder: false,
     homeButton: false,
@@ -315,7 +307,7 @@ function setBaseLayer(kind) {
   if (baseLayer) layers.remove(baseLayer, false);
   baseLayer = layers.addImageryProvider(provider, 0);
   // 버튼 active 토글
-  ['esri','vworld','vworldBase','google'].forEach(k => {
+  ['vworld','vworldBase','google'].forEach(k => {
     const el = document.getElementById('lyr-' + (k === 'vworldBase' ? 'vworld2' : k));
     if (el) el.classList.toggle('active', k === kind);
   });
