@@ -436,10 +436,64 @@ function drawRestroomIcon(ctx, cx, cy, size, color) {
   ctx.restore();
 }
 
+function drawParkingIcon(ctx, cx, cy, size, color) {
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.fillStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 4;
+  const s = size / 28;
+
+  // 외곽 둥근 사각형 테두리
+  const bw = 22 * s, bh = 22 * s;
+  const bx = cx - bw / 2, by = cy - bh / 2;
+  const r = 3.5 * s;
+  ctx.lineWidth = 2 * s;
+  ctx.beginPath();
+  ctx.moveTo(bx + r, by);
+  ctx.lineTo(bx + bw - r, by);
+  ctx.arcTo(bx + bw, by,         bx + bw, by + r,         r);
+  ctx.lineTo(bx + bw, by + bh - r);
+  ctx.arcTo(bx + bw, by + bh,    bx + bw - r, by + bh,    r);
+  ctx.lineTo(bx + r,  by + bh);
+  ctx.arcTo(bx,       by + bh,   bx, by + bh - r,          r);
+  ctx.lineTo(bx,      by + r);
+  ctx.arcTo(bx,       by,        bx + r, by,               r);
+  ctx.closePath();
+  ctx.stroke();
+
+  // 'P' 글자 — 줄기
+  const px = cx - 3.5 * s;
+  const ptop = cy - 8 * s;
+  const pbot = cy + 8 * s;
+  ctx.lineWidth = 3 * s;
+  ctx.lineCap = 'round';
+  ctx.beginPath();
+  ctx.moveTo(px, ptop);
+  ctx.lineTo(px, pbot);
+  ctx.stroke();
+
+  // 'P' 글자 — 반원 (오른쪽 볼록)
+  ctx.beginPath();
+  ctx.moveTo(px, ptop);
+  ctx.bezierCurveTo(
+    px + 10 * s, ptop,
+    px + 10 * s, cy,
+    px,          cy
+  );
+  ctx.stroke();
+
+  ctx.restore();
+}
+
 // 공통 아이콘 드로어 (타입별 분기)
 function drawFacilityIcon(ctx, type, cx, cy, size, color) {
   if (type === 'restroom') {
     drawRestroomIcon(ctx, cx, cy, size, color);
+    return;
+  }
+  if (type === 'parking') {
+    drawParkingIcon(ctx, cx, cy, size, color);
     return;
   }
   const cfg = TYPE_CFG_3D[type] || { icon: '📍' };
