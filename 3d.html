@@ -1,0 +1,417 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>태화강국가정원 3D · VWorld</title>
+<link href="https://cdn.jsdelivr.net/npm/cesium@1.112.0/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.112.0/Build/Cesium/Cesium.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap');
+  html, body { margin:0; padding:0; overflow:hidden; height:100vh; font-family:'Noto Sans KR', sans-serif; background:#000; }
+  #cesiumContainer { width:100%; height:100vh; }
+  .cesium-widget-credits { display:none !important; }
+
+  .top-bar {
+    position: fixed;
+    top: 14px; left: 14px; right: 14px;
+    z-index: 1000;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 10px;
+    pointer-events: none;
+  }
+  .tb-btn, .tb-info {
+    pointer-events: auto;
+    padding: 9px 14px;
+    background: rgba(12,19,34,0.88);
+    color: #e2e8f0;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    text-decoration: none;
+    font-size: 13px;
+    font-weight: 700;
+    backdrop-filter: blur(8px);
+    display: flex; align-items: center; gap: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+  }
+  .tb-btn:hover { background: rgba(30,41,59,0.95); border-color: #475569; }
+  .tb-info .sub { font-size: 11px; color: #94a3b8; font-weight: 500; margin-left: 6px; }
+
+  .preset-bar {
+    position: fixed;
+    top: 72px; right: 14px;
+    z-index: 1000;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .preset-bar button {
+    padding: 6px 11px;
+    background: rgba(12,19,34,0.85);
+    color: #cbd5e1;
+    border: 1px solid #334155;
+    border-radius: 7px;
+    font-size: 11px; font-weight: 700;
+    cursor: pointer;
+    font-family: 'Noto Sans KR', sans-serif;
+    backdrop-filter: blur(6px);
+    min-width: 96px;
+    text-align: left;
+  }
+  .preset-bar button:hover { background: rgba(30,41,59,0.95); color: #fff; }
+
+  .bottom-info {
+    position: fixed;
+    bottom: 14px; left: 14px;
+    z-index: 1000;
+    padding: 10px 14px;
+    background: rgba(12,19,34,0.88);
+    color: #94a3b8;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    backdrop-filter: blur(8px);
+    font-size: 11px;
+    max-width: 320px;
+    line-height: 1.55;
+  }
+  .bottom-info strong { color: #e2e8f0; }
+
+  .legend {
+    position: fixed;
+    bottom: 14px; right: 14px;
+    z-index: 1000;
+    padding: 10px 12px;
+    background: rgba(12,19,34,0.88);
+    color: #cbd5e1;
+    border: 1px solid #334155;
+    border-radius: 10px;
+    backdrop-filter: blur(8px);
+    font-size: 11px;
+    display: flex; flex-wrap: wrap; gap: 8px 14px;
+    max-width: 320px;
+  }
+  .legend .it { display:flex; align-items:center; gap:4px; }
+
+  .err-banner {
+    position: fixed;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2000;
+    background: #7f1d1d;
+    color: #fee2e2;
+    padding: 16px 22px;
+    border: 1px solid #ef4444;
+    border-radius: 10px;
+    font-size: 13px;
+    max-width: 420px;
+    text-align: center;
+    line-height: 1.6;
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div id="cesiumContainer"></div>
+
+<div class="top-bar">
+  <a href="index.html" class="tb-btn">← 2D 지도</a>
+  <div class="tb-info">
+    🏞️ <span id="parkName">로딩중...</span>
+    <span class="sub" id="parkMeta"></span>
+  </div>
+</div>
+
+<div class="preset-bar">
+  <button onclick="flyOverview()">📍 전체 보기</button>
+  <button onclick="flyTop()">🛰️ 탑뷰</button>
+  <button onclick="flyTilted()">🎬 사선 45°</button>
+  <button onclick="toggleLabels()">🏷️ 라벨 토글</button>
+</div>
+
+<div class="bottom-info">
+  <div><strong>VWorld 3D 위성지도</strong> · 국토교통부 공간정보오픈플랫폼</div>
+  <div>🖱️ 좌클릭 드래그: 이동 · 우클릭 드래그: 회전/기울기 · 휠: 줌</div>
+  <div id="facCount" style="margin-top:4px;"></div>
+</div>
+
+<div class="legend" id="legend"></div>
+
+<div class="err-banner" id="errBanner"></div>
+
+<script>
+const VWORLD_API_KEY = '72E5F03C-6058-35DB-941E-C9E787A7BA99';
+
+const TYPE_CFG = {
+  bench:    { icon:'🪑', label:'벤치',         color:'#D4A017' },
+  restroom: { icon:'🚻', label:'화장실',       color:'#5DADE2' },
+  exercise: { icon:'🏋️', label:'운동기구',     color:'#EC7063' },
+  light:    { icon:'💡', label:'가로등',       color:'#F5B041' },
+  parking:  { icon:'🅿️', label:'주차장',       color:'#A569BD' },
+  bin:      { icon:'🗑️', label:'쓰레기통',     color:'#58D68D' },
+  cctv:     { icon:'📹', label:'CCTV',         color:'#22D3EE' },
+};
+
+function hpColor(hp) {
+  if (hp > 80) return '#22c55e';
+  if (hp > 50) return '#84cc16';
+  if (hp > 30) return '#f59e0b';
+  if (hp > 10) return '#f97316';
+  return '#ef4444';
+}
+
+// localStorage에서 데이터 로드 (2D 대시보드와 공유)
+function loadCurrentPark() {
+  try {
+    const parks = JSON.parse(localStorage.getItem('parks-list') || '[]');
+    const currentId = localStorage.getItem('current-park-id') || 'taehwa-nat';
+    const p = parks.find(x => x.id === currentId);
+    if (p) return p;
+    if (parks.length > 0) return parks[0];
+  } catch(e) {}
+  // 기본값
+  return {
+    id: 'taehwa-nat',
+    name: '태화강국가정원',
+    center: [35.5478, 129.2962],
+    boundary: [[
+      [35.5520, 129.2905],[35.5522, 129.2945],[35.5515, 129.2985],
+      [35.5500, 129.3028],[35.5480, 129.3048],[35.5455, 129.3042],
+      [35.5440, 129.3015],[35.5432, 129.2975],[35.5438, 129.2935],
+      [35.5455, 129.2905],[35.5482, 129.2892],[35.5505, 129.2895],
+    ]],
+  };
+}
+
+function loadFacilities(parkId) {
+  try {
+    const raw = localStorage.getItem(`park-${parkId}-facilities`);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch(e) {}
+  return [];
+}
+
+function normalizeBoundaries(park) {
+  if (!park.boundary || park.boundary.length === 0) return [];
+  if (typeof park.boundary[0][0] === 'number') return [park.boundary];
+  return park.boundary;
+}
+
+const park = loadCurrentPark();
+const facilities = loadFacilities(park.id);
+const boundaries = normalizeBoundaries(park);
+
+document.getElementById('parkName').textContent = park.name;
+document.getElementById('parkMeta').textContent =
+  `· 시설 ${facilities.length}개 · 영역 ${boundaries.length}개`;
+document.getElementById('facCount').textContent = `🏷️ ${facilities.length}개 시설 로드됨`;
+
+// 범례 렌더
+const usedTypes = [...new Set(facilities.map(f => f.type))];
+const legend = document.getElementById('legend');
+if (usedTypes.length > 0) {
+  legend.innerHTML = usedTypes.map(t => {
+    const cfg = TYPE_CFG[t] || { icon:'📍', label:t, color:'#94a3b8' };
+    return `<div class="it"><span>${cfg.icon}</span><span style="color:${cfg.color};font-weight:700;">${cfg.label}</span></div>`;
+  }).join('');
+} else {
+  legend.style.display = 'none';
+}
+
+// ================= Cesium + VWorld 초기화 =================
+Cesium.Ion.defaultAccessToken = ''; // Cesium Ion 불필요
+
+let viewer;
+try {
+  const vworldSat = new Cesium.UrlTemplateImageryProvider({
+    url: `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_API_KEY}/Satellite/{z}/{y}/{x}.jpeg`,
+    credit: '© VWorld · 국토교통부 공간정보오픈플랫폼',
+    maximumLevel: 19,
+  });
+  const vworldHybrid = new Cesium.UrlTemplateImageryProvider({
+    url: `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_API_KEY}/Hybrid/{z}/{y}/{x}.png`,
+    maximumLevel: 19,
+  });
+
+  viewer = new Cesium.Viewer('cesiumContainer', {
+    imageryProvider: vworldSat,
+    baseLayerPicker: false,
+    geocoder: false,
+    homeButton: false,
+    sceneModePicker: false,
+    navigationHelpButton: false,
+    animation: false,
+    timeline: false,
+    fullscreenButton: false,
+    infoBox: true,
+    selectionIndicator: true,
+    terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+  });
+  viewer.imageryLayers.addImageryProvider(vworldHybrid);
+  viewer.scene.globe.enableLighting = false;
+  viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#0b1220');
+
+  // 로고/credits 숨김 보강
+  const credit = viewer._cesiumWidget._creditContainer;
+  if (credit) credit.style.display = 'none';
+} catch(e) {
+  document.getElementById('errBanner').style.display = 'block';
+  document.getElementById('errBanner').innerHTML =
+    `Cesium 초기화 실패: ${e.message}<br><br>` +
+    `VWorld API 키 또는 도메인 등록을 확인하세요.`;
+  throw e;
+}
+
+const [centerLat, centerLng] = park.center;
+const viewHeight = 2200;
+
+function flyOverview() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(centerLng, centerLat, viewHeight),
+    orientation: {
+      heading: Cesium.Math.toRadians(0),
+      pitch: Cesium.Math.toRadians(-55),
+      roll: 0,
+    },
+    duration: 1.6,
+  });
+}
+function flyTop() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(centerLng, centerLat, viewHeight),
+    orientation: {
+      heading: Cesium.Math.toRadians(0),
+      pitch: Cesium.Math.toRadians(-89),
+      roll: 0,
+    },
+    duration: 1.4,
+  });
+}
+function flyTilted() {
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(centerLng, centerLat - 0.01, 1500),
+    orientation: {
+      heading: Cesium.Math.toRadians(0),
+      pitch: Cesium.Math.toRadians(-35),
+      roll: 0,
+    },
+    duration: 1.8,
+  });
+}
+
+// 초기 시점
+flyOverview();
+
+// ================= 공원 경계 폴리곤 =================
+boundaries.forEach((poly, idx) => {
+  if (!poly || poly.length < 3) return;
+  const flat = [];
+  poly.forEach(pt => { flat.push(pt[1], pt[0]); }); // [lng, lat]로 변환
+  viewer.entities.add({
+    name: `${park.name} 경계 ${idx + 1}`,
+    polygon: {
+      hierarchy: Cesium.Cartesian3.fromDegreesArray(flat),
+      material: Cesium.Color.fromCssColorString('#3b82f6').withAlpha(0.22),
+      outline: true,
+      outlineColor: Cesium.Color.fromCssColorString('#3b82f6'),
+      outlineWidth: 3,
+      height: 0,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+    },
+  });
+});
+
+// ================= 시설 마커 =================
+let labelsVisible = true;
+
+function buildMarkerCanvas(f) {
+  const cfg = TYPE_CFG[f.type] || { icon:'📍', color:'#94a3b8' };
+  const hp = f.hp || 0;
+  const hpC = hpColor(hp);
+  const canvas = document.createElement('canvas');
+  canvas.width = 72; canvas.height = 88;
+  const ctx = canvas.getContext('2d');
+  // glow
+  const grad = ctx.createRadialGradient(36, 36, 10, 36, 36, 34);
+  grad.addColorStop(0, cfg.color + 'cc');
+  grad.addColorStop(1, cfg.color + '00');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 72, 72);
+  // main circle
+  ctx.beginPath();
+  ctx.arc(36, 36, 22, 0, Math.PI * 2);
+  ctx.fillStyle = cfg.color + 'd0';
+  ctx.fill();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  // emoji icon
+  ctx.font = '24px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(cfg.icon, 36, 40);
+  // HP bar
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(12, 68, 48, 5);
+  ctx.fillStyle = hpC;
+  ctx.fillRect(12, 68, 48 * (hp / 100), 5);
+  ctx.strokeStyle = '#0c1322';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(12, 68, 48, 5);
+  return canvas.toDataURL();
+}
+
+const labels = [];
+facilities.forEach(f => {
+  if (f.lat == null || f.lng == null) return;
+  const cfg = TYPE_CFG[f.type] || { icon:'📍', label:f.type, color:'#94a3b8' };
+  const entity = viewer.entities.add({
+    name: f.name,
+    position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, 2),
+    billboard: {
+      image: buildMarkerCanvas(f),
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      scale: 0.7,
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+    },
+    label: {
+      text: f.name,
+      font: 'bold 11px "Noto Sans KR", sans-serif',
+      fillColor: Cesium.Color.WHITE,
+      outlineColor: Cesium.Color.fromCssColorString('#0c1322'),
+      outlineWidth: 3,
+      style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+      showBackground: true,
+      backgroundColor: Cesium.Color.fromCssColorString('#0c1322').withAlpha(0.88),
+      backgroundPadding: new Cesium.Cartesian2(7, 4),
+      pixelOffset: new Cesium.Cartesian2(0, -66),
+      scale: 0.95,
+      heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3500),
+      disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+    },
+    description: `
+      <table style="font-family: 'Noto Sans KR', sans-serif; color:#0f172a;">
+        <tr><td style="padding:4px 10px 4px 0;color:#64748b;">ID</td><td style="font-family:monospace;">${f.id}</td></tr>
+        <tr><td style="padding:4px 10px 4px 0;color:#64748b;">유형</td><td>${cfg.icon} ${cfg.label}</td></tr>
+        <tr><td style="padding:4px 10px 4px 0;color:#64748b;">구역</td><td>${f.zone || '-'}</td></tr>
+        <tr><td style="padding:4px 10px 4px 0;color:#64748b;">HP</td><td style="font-family:monospace;">${f.hp || 0} / ${f.maxHp || 100}</td></tr>
+        <tr><td style="padding:4px 10px 4px 0;color:#64748b;">설치일</td><td>${f.installed || '-'}</td></tr>
+        <tr><td style="padding:4px 10px 4px 0;color:#64748b;">마지막 점검</td><td>${f.lastCheck || '-'}</td></tr>
+      </table>
+    `,
+  });
+  labels.push(entity);
+});
+
+function toggleLabels() {
+  labelsVisible = !labelsVisible;
+  labels.forEach(e => { if (e.label) e.label.show = labelsVisible; });
+}
+</script>
+</body>
+</html>

@@ -883,7 +883,14 @@ function renderFilters() {
     + `<div class="fb-break"></div>`
     + `<button class="filter-btn density-btn ${densityVisible?'active':''}" onclick="toggleDensity()">
         <span>🔥</span> 혼잡도
+      </button>`
+    + `<button class="filter-btn btn-3d" onclick="open3DView()">
+        <span>🛰️</span> 3D 지도
       </button>`;
+}
+
+function open3DView() {
+  window.location.href = '3d.html';
 }
 
 function setFilter(key) {

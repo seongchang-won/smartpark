@@ -1276,6 +1276,16 @@ body.light-theme .staff-cnt { background: #dbeafe; color: #1e40af; border-color:
   border-color: #a78bfa;
   color: #fff;
 }
+.filter-btn.btn-3d {
+  background: rgba(34,211,238,0.14);
+  border-color: rgba(34,211,238,0.4);
+  color: #67e8f9;
+}
+.filter-btn.btn-3d:hover {
+  background: rgba(34,211,238,0.25);
+  border-color: #22d3ee;
+  color: #fff;
+}
 
 .list-panel {
   display: flex; flex-direction: column;
