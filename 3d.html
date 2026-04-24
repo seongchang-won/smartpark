@@ -381,6 +381,71 @@ function drawTintedEmoji(ctx, emoji, cx, cy, fontSize, tintColor) {
   ctx.drawImage(temp, cx - s/2, cy - s/2);
 }
 
+// 화장실: 남/녀 실루엣 커스텀 드로잉 (emoji보다 훨씬 명확함)
+function drawRestroomIcon(ctx, cx, cy, size, color) {
+  ctx.save();
+  ctx.fillStyle = color;
+  ctx.strokeStyle = color;
+  ctx.shadowColor = color;
+  ctx.shadowBlur = 3;
+  const s = size / 28;
+
+  // === 남자 (왼쪽) ===
+  // 머리
+  ctx.beginPath();
+  ctx.arc(cx - 7*s, cy - 7*s, 2*s, 0, Math.PI * 2);
+  ctx.fill();
+  // 몸통(사다리꼴)
+  ctx.beginPath();
+  ctx.moveTo(cx - 10*s, cy - 3.5*s);
+  ctx.lineTo(cx - 4*s,  cy - 3.5*s);
+  ctx.lineTo(cx - 5*s,  cy + 1.5*s);
+  ctx.lineTo(cx - 9*s,  cy + 1.5*s);
+  ctx.closePath();
+  ctx.fill();
+  // 다리 (두 개)
+  ctx.fillRect(cx - 8.5*s, cy + 1.5*s, 1.6*s, 6.5*s);
+  ctx.fillRect(cx - 6.1*s, cy + 1.5*s, 1.6*s, 6.5*s);
+
+  // === 여자 (오른쪽) ===
+  // 머리
+  ctx.beginPath();
+  ctx.arc(cx + 7*s, cy - 7*s, 2*s, 0, Math.PI * 2);
+  ctx.fill();
+  // 드레스 (삼각)
+  ctx.beginPath();
+  ctx.moveTo(cx + 4*s,  cy - 3.5*s);
+  ctx.lineTo(cx + 10*s, cy - 3.5*s);
+  ctx.lineTo(cx + 11.5*s, cy + 3.5*s);
+  ctx.lineTo(cx + 2.5*s,  cy + 3.5*s);
+  ctx.closePath();
+  ctx.fill();
+  // 다리
+  ctx.fillRect(cx + 5.5*s, cy + 3.5*s, 1.6*s, 4.5*s);
+  ctx.fillRect(cx + 7.9*s, cy + 3.5*s, 1.6*s, 4.5*s);
+
+  // 가운데 구분선 (옅게)
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = color + '55';
+  ctx.lineWidth = Math.max(1, s * 0.8);
+  ctx.beginPath();
+  ctx.moveTo(cx, cy - 9.5*s);
+  ctx.lineTo(cx, cy + 8*s);
+  ctx.stroke();
+
+  ctx.restore();
+}
+
+// 공통 아이콘 드로어 (타입별 분기)
+function drawFacilityIcon(ctx, type, cx, cy, size, color) {
+  if (type === 'restroom') {
+    drawRestroomIcon(ctx, cx, cy, size, color);
+    return;
+  }
+  const cfg = TYPE_CFG_3D[type] || { icon: '📍' };
+  drawTintedEmoji(ctx, cfg.icon, cx, cy, size, color);
+}
+
 function buildHoloCanvas(f) {
   const cfg = TYPE_CFG_3D[f.type] || { icon:'📍', color:'#22d3ee' };
   const hp = f.hp || 0;
@@ -448,8 +513,8 @@ function buildHoloCanvas(f) {
   }
   ctx.restore();
 
-  // 아이콘 (네온 틴트)
-  drawTintedEmoji(ctx, cfg.icon, cx, cy - 2, 28, main);
+  // 아이콘 (네온 틴트 또는 커스텀 드로잉)
+  drawFacilityIcon(ctx, f.type, cx, cy - 2, 28, main);
 
   // 하단 HP 바
   ctx.fillStyle = main;
