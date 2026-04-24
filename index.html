@@ -7,21 +7,78 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#090e1a">
-<title>태화강국가정원 스마트공원 IoT 통합관제</title>
+<title>태화강국가정원 3D · 스마트공원 IoT 통합관제</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.heat/0.2.0/leaflet-heat.js"></script>
+<link href="https://cdn.jsdelivr.net/npm/cesium@1.112.0/Build/Cesium/Widgets/widgets.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.112.0/Build/Cesium/Cesium.js"></script>
 <link rel="stylesheet" href="css/style.css" />
+<style>
+  /* Leaflet 맵은 화면 밖으로 숨김 (app.js 초기화용) */
+  #map {
+    position: absolute !important;
+    left: -9999px !important;
+    top: 0 !important;
+    width: 300px !important;
+    height: 300px !important;
+    pointer-events: none;
+  }
+  #cesiumContainer {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+  }
+  .map-container { position: relative; background: #000; }
+  .cesium-widget-credits { display:none !important; }
+  /* 맵 오버레이 컨트롤은 Cesium 위에 */
+  .map-controls, .stats-overlay, .add-indicator, .add-menu,
+  .map-3d-bar {
+    z-index: 20 !important;
+  }
+  /* 3D 우상단 레이어·카메라 바 */
+  .map-3d-bar {
+    position: absolute;
+    top: 12px; right: 12px;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .map-3d-bar button {
+    padding: 6px 11px;
+    background: rgba(12,19,34,0.85);
+    color: #cbd5e1;
+    border: 1px solid #334155;
+    border-radius: 7px;
+    font-size: 11px; font-weight: 700;
+    cursor: pointer;
+    font-family: 'Noto Sans KR', sans-serif;
+    backdrop-filter: blur(6px);
+    min-width: 116px;
+    text-align: left;
+    transition: all 0.15s;
+  }
+  .map-3d-bar button:hover { background: rgba(30,41,59,0.95); color: #fff; }
+  .map-3d-bar button.active { background: rgba(34,211,238,0.25); border-color: #22d3ee; color: #fff; }
+  .map-3d-bar .bar-title {
+    font-size: 9px; color: #64748b;
+    padding: 2px 4px; margin-top: 4px;
+    text-transform: uppercase; letter-spacing: 0.5px;
+  }
+  body.light-theme .map-3d-bar button {
+    background: rgba(255,255,255,0.9); color: #475569;
+    border-color: #e2e8f0;
+  }
+  body.light-theme .map-3d-bar button:hover { background: #f1f5f9; color: #0f172a; }
+</style>
 </head>
 <body>
 
-<!-- Header -->
+<!-- 2D와 동일한 헤더 -->
 <div class="header">
   <div class="header-left">
     <div class="header-icon">🌿</div>
     <div>
       <div class="header-title">태화강국가정원 <span>IoT 통합관제</span></div>
-      <div class="header-sub">스마트공원 시설물 관리 시스템 v1.0</div>
+      <div class="header-sub">스마트공원 시설물 관리 시스템 v1.0 · 3D</div>
     </div>
   </div>
   <div class="header-right">
@@ -34,14 +91,28 @@
   </div>
 </div>
 
-<!-- Main -->
+<!-- 2D와 동일한 메인 레이아웃 -->
 <div class="main">
   <div class="map-container">
     <div id="map"></div>
+    <div id="cesiumContainer"></div>
     <div class="map-controls" id="filterBar"></div>
     <div class="add-menu hidden" id="addMenu"></div>
     <div class="add-indicator hidden" id="addIndicator"></div>
     <div class="stats-overlay" id="statsOverlay"></div>
+    <div class="map-3d-bar" id="map3dBar">
+      <div class="bar-title">위성 영상</div>
+      <button id="lyr-vworld"  class="active" onclick="setBaseLayer('vworld')">🇰🇷 VWorld 위성</button>
+      <button id="lyr-vworld2" onclick="setBaseLayer('vworldBase')">🗺️ VWorld 일반</button>
+      <button id="lyr-google"  onclick="setBaseLayer('google')">🛰️ 구글 위성</button>
+      <div class="bar-title">오버레이</div>
+      <button id="lyr-hybrid" onclick="toggleHybrid()">🏷️ 라벨 오버레이</button>
+      <button id="lyr-holo" class="active" onclick="toggleHolo()">🌌 홀로그램</button>
+      <div class="bar-title">카메라</div>
+      <button onclick="flyOverview()">📍 전체 보기</button>
+      <button onclick="flyTop()">⬇️ 탑뷰</button>
+      <button onclick="flyTilted()">🎬 사선 45°</button>
+    </div>
   </div>
 
   <div class="sidebar">
@@ -61,6 +132,609 @@
   </div>
 </div>
 
+<!-- 2D 로직 전부 로드 (Leaflet 맵은 화면밖 은닉) -->
 <script src="js/app.js"></script>
+
+<!-- Cesium 3D 어댑터 -->
+<script>
+const VWORLD_API_KEY = '72E5F03C-6058-35DB-941E-C9E787A7BA99';
+
+// Cesium 뷰어 초기화
+Cesium.Ion.defaultAccessToken = '';
+
+function makeProvider(kind) {
+  if (kind === 'google') {
+    return new Cesium.UrlTemplateImageryProvider({
+      url: 'https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}',
+      credit: '© Google', maximumLevel: 20,
+    });
+  }
+  if (kind === 'vworldBase') {
+    return new Cesium.UrlTemplateImageryProvider({
+      url: `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_API_KEY}/Base/{z}/{y}/{x}.png`,
+      credit: '© VWorld · 국토교통부', maximumLevel: 19,
+    });
+  }
+  return new Cesium.UrlTemplateImageryProvider({
+    url: `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_API_KEY}/Satellite/{z}/{y}/{x}.jpeg`,
+    credit: '© VWorld · 국토교통부', maximumLevel: 19,
+  });
+}
+
+const viewer = new Cesium.Viewer('cesiumContainer', {
+  imageryProvider: makeProvider('vworld'),
+  baseLayerPicker: false, geocoder: false, homeButton: false,
+  sceneModePicker: false, navigationHelpButton: false,
+  animation: false, timeline: false, fullscreenButton: false,
+  infoBox: true, selectionIndicator: true,
+  terrainProvider: new Cesium.EllipsoidTerrainProvider(),
+});
+let baseLayer = viewer.imageryLayers.get(0);
+let hybridLayer = null;
+let hybridVisible = false;
+viewer.scene.globe.enableLighting = false;
+viewer.scene.backgroundColor = Cesium.Color.fromCssColorString('#0b1220');
+const credit = viewer._cesiumWidget._creditContainer;
+if (credit) credit.style.display = 'none';
+
+function setBaseLayer(kind) {
+  const provider = makeProvider(kind);
+  const layers = viewer.imageryLayers;
+  if (baseLayer) layers.remove(baseLayer, false);
+  baseLayer = layers.addImageryProvider(provider, 0);
+  ['vworld','vworldBase','google'].forEach(k => {
+    const el = document.getElementById('lyr-' + (k === 'vworldBase' ? 'vworld2' : k));
+    if (el) el.classList.toggle('active', k === kind);
+  });
+  applyHoloTone();
+}
+
+function toggleHybrid() {
+  if (hybridVisible) {
+    if (hybridLayer) { viewer.imageryLayers.remove(hybridLayer, false); hybridLayer = null; }
+    hybridVisible = false;
+  } else {
+    hybridLayer = viewer.imageryLayers.addImageryProvider(
+      new Cesium.UrlTemplateImageryProvider({
+        url: `https://api.vworld.kr/req/wmts/1.0.0/${VWORLD_API_KEY}/Hybrid/{z}/{y}/{x}.png`,
+        maximumLevel: 19,
+      })
+    );
+    hybridVisible = true;
+  }
+  const btn = document.getElementById('lyr-hybrid');
+  if (btn) btn.classList.toggle('active', hybridVisible);
+}
+
+// 홀로그램 모드
+let holoMode = true;
+const TYPE_CFG_3D = {
+  bench:    { icon:'🪑', color:'#D4A017' },
+  restroom: { icon:'🚻', color:'#5DADE2' },
+  exercise: { icon:'🏋️', color:'#EC7063' },
+  light:    { icon:'💡', color:'#F5B041' },
+  parking:  { icon:'🅿️', color:'#A569BD' },
+  bin:      { icon:'🗑️', color:'#58D68D' },
+  cctv:     { icon:'📹', color:'#22D3EE' },
+};
+function hpColor3D(hp) {
+  if (hp > 80) return '#22c55e';
+  if (hp > 50) return '#84cc16';
+  if (hp > 30) return '#f59e0b';
+  if (hp > 10) return '#f97316';
+  return '#ef4444';
+}
+function beamColor3D(hp) {
+  if (hp > 50) return '#22d3ee';
+  if (hp > 30) return '#f59e0b';
+  return '#ef4444';
+}
+
+// 엔티티 저장소 (ID -> 엔티티 배열)
+const entityMap = new Map(); // facilityId -> [marker, beam, pad, label]
+const boundaryEntities = [];
+
+function applyHoloTone() {
+  if (!baseLayer) return;
+  if (holoMode) {
+    baseLayer.brightness = 0.6;
+    baseLayer.contrast = 1.3;
+    baseLayer.saturation = 0.6;
+  } else {
+    baseLayer.brightness = 1.0;
+    baseLayer.contrast = 1.0;
+    baseLayer.saturation = 1.0;
+  }
+}
+
+function buildHoloCanvas(f) {
+  const cfg = TYPE_CFG_3D[f.type] || { icon:'📍', color:'#22d3ee' };
+  const hp = f.hp || 0;
+  const main = beamColor3D(hp);
+  const size = 96;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const cx = size/2, cy = size/2;
+  const glow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 46);
+  glow.addColorStop(0, main + 'aa');
+  glow.addColorStop(0.6, main + '33');
+  glow.addColorStop(1, main + '00');
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, size, size);
+  ctx.strokeStyle = main;
+  ctx.lineWidth = 2;
+  ctx.shadowColor = main;
+  ctx.shadowBlur = 10;
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 - Math.PI / 8;
+    const x = cx + Math.cos(a) * 40;
+    const y = cy + Math.sin(a) * 40;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.stroke();
+  ctx.shadowBlur = 0;
+  ctx.fillStyle = 'rgba(8, 20, 32, 0.85)';
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 - Math.PI / 8;
+    const x = cx + Math.cos(a) * 36;
+    const y = cy + Math.sin(a) * 36;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.fill();
+  ctx.font = '28px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(cfg.icon, cx, cy - 2);
+  ctx.fillStyle = main;
+  ctx.fillRect(cx - 14, cy + 22, 28 * (hp/100), 2);
+  ctx.strokeStyle = main + '55';
+  ctx.lineWidth = 1;
+  ctx.strokeRect(cx - 14, cy + 22, 28, 2);
+  return canvas.toDataURL();
+}
+
+function buildBasePad(main) {
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size; canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(size/2, size/2, 2, size/2, size/2, size/2);
+  grad.addColorStop(0, main + 'ee');
+  grad.addColorStop(0.4, main + '55');
+  grad.addColorStop(1, main + '00');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, size/2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = main;
+  ctx.lineWidth = 1.5;
+  ctx.beginPath();
+  ctx.arc(size/2, size/2, 18, 0, Math.PI * 2);
+  ctx.stroke();
+  return canvas.toDataURL();
+}
+
+function buildLegacyCanvas(f) {
+  const cfg = TYPE_CFG_3D[f.type] || { icon:'📍', color:'#94a3b8' };
+  const hp = f.hp || 0;
+  const hpC = hpColor3D(hp);
+  const canvas = document.createElement('canvas');
+  canvas.width = 72; canvas.height = 88;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(36, 36, 10, 36, 36, 34);
+  grad.addColorStop(0, cfg.color + 'cc');
+  grad.addColorStop(1, cfg.color + '00');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 72, 72);
+  ctx.beginPath();
+  ctx.arc(36, 36, 22, 0, Math.PI * 2);
+  ctx.fillStyle = cfg.color + 'd0';
+  ctx.fill();
+  ctx.strokeStyle = '#ffffff';
+  ctx.lineWidth = 3;
+  ctx.stroke();
+  ctx.font = '24px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(cfg.icon, 36, 40);
+  ctx.fillStyle = '#1e293b';
+  ctx.fillRect(12, 68, 48, 5);
+  ctx.fillStyle = hpC;
+  ctx.fillRect(12, 68, 48 * (hp / 100), 5);
+  return canvas.toDataURL();
+}
+
+function clearAllEntities() {
+  entityMap.forEach(arr => arr.forEach(e => viewer.entities.remove(e)));
+  entityMap.clear();
+  boundaryEntities.forEach(e => viewer.entities.remove(e));
+  boundaryEntities.length = 0;
+}
+
+function render3DBoundary() {
+  boundaryEntities.forEach(e => viewer.entities.remove(e));
+  boundaryEntities.length = 0;
+  const park = getCurrentPark();
+  const polygons = park.boundary || [];
+  const color = holoMode ? '#22d3ee' : '#3b82f6';
+  const fill = holoMode ? 0.08 : 0.20;
+  polygons.forEach((poly, idx) => {
+    if (!poly || poly.length < 3) return;
+    const flat = [];
+    poly.forEach(pt => { flat.push(pt[1], pt[0]); });
+    const p = viewer.entities.add({
+      polygon: {
+        hierarchy: Cesium.Cartesian3.fromDegreesArray(flat),
+        material: Cesium.Color.fromCssColorString(color).withAlpha(fill),
+        outline: true,
+        outlineColor: Cesium.Color.fromCssColorString(color),
+        outlineWidth: 3,
+        height: 0,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+      },
+    });
+    boundaryEntities.push(p);
+    if (holoMode) {
+      const closed = flat.slice();
+      closed.push(flat[0], flat[1]);
+      boundaryEntities.push(viewer.entities.add({
+        polyline: {
+          positions: Cesium.Cartesian3.fromDegreesArray(closed),
+          width: 5, clampToGround: true,
+          material: new Cesium.PolylineGlowMaterialProperty({
+            glowPower: 0.35, taperPower: 1.0,
+            color: Cesium.Color.fromCssColorString('#22d3ee'),
+          }),
+        },
+      }));
+    }
+  });
+}
+
+function renderFacility3D(f) {
+  // 기존 엔티티 제거
+  if (entityMap.has(f.id)) {
+    entityMap.get(f.id).forEach(e => viewer.entities.remove(e));
+    entityMap.delete(f.id);
+  }
+  if (f.lat == null || f.lng == null) return;
+  const entities = [];
+  const cfg = TYPE_CFG_3D[f.type] || { icon:'📍', color:'#94a3b8' };
+  const hp = f.hp || 0;
+
+  function tag(e) { e.facilityId = f.id; return e; }
+
+  if (holoMode) {
+    const color = beamColor3D(hp);
+    entities.push(tag(viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, 0.5),
+      billboard: {
+        image: buildBasePad(color),
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        scale: 0.6,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+    })));
+    entities.push(tag(viewer.entities.add({
+      polyline: {
+        positions: Cesium.Cartesian3.fromDegreesArrayHeights([f.lng, f.lat, 0, f.lng, f.lat, 60]),
+        width: 4,
+        material: new Cesium.PolylineGlowMaterialProperty({
+          glowPower: 0.35, taperPower: 0.2,
+          color: Cesium.Color.fromCssColorString(color),
+        }),
+        arcType: Cesium.ArcType.NONE,
+      },
+    })));
+    entities.push(tag(viewer.entities.add({
+      name: f.name,
+      position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, 60),
+      billboard: {
+        image: buildHoloCanvas(f),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        scale: 0.75,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: `${hp}`,
+        font: 'bold 22px "JetBrains Mono", monospace',
+        fillColor: Cesium.Color.fromCssColorString(color),
+        outlineColor: Cesium.Color.BLACK, outlineWidth: 4,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset: new Cesium.Cartesian2(0, -105),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 5000),
+      },
+    })));
+    entities.push(tag(viewer.entities.add({
+      position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, 60),
+      label: {
+        text: f.name,
+        font: 'bold 11px "Noto Sans KR", sans-serif',
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.fromCssColorString('#0c1322'),
+        outlineWidth: 3,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString('#0c1322').withAlpha(0.85),
+        backgroundPadding: new Cesium.Cartesian2(6, 3),
+        pixelOffset: new Cesium.Cartesian2(0, -48),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 2500),
+      },
+    })));
+  } else {
+    entities.push(tag(viewer.entities.add({
+      name: f.name,
+      position: Cesium.Cartesian3.fromDegrees(f.lng, f.lat, 2),
+      billboard: {
+        image: buildLegacyCanvas(f),
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        scale: 0.7,
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+      },
+      label: {
+        text: f.name,
+        font: 'bold 11px "Noto Sans KR", sans-serif',
+        fillColor: Cesium.Color.WHITE,
+        outlineColor: Cesium.Color.fromCssColorString('#0c1322'),
+        outlineWidth: 3,
+        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+        showBackground: true,
+        backgroundColor: Cesium.Color.fromCssColorString('#0c1322').withAlpha(0.88),
+        backgroundPadding: new Cesium.Cartesian2(7, 4),
+        pixelOffset: new Cesium.Cartesian2(0, -66),
+        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+        distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0, 3500),
+        disableDepthTestDistance: Number.POSITIVE_INFINITY,
+        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+      },
+    })));
+  }
+
+  entityMap.set(f.id, entities);
+}
+
+function render3DAllMarkers(filter) {
+  // 기존 마커 제거 (경계는 유지)
+  entityMap.forEach(arr => arr.forEach(e => viewer.entities.remove(e)));
+  entityMap.clear();
+  const list = filter === 'all' ? FACILITIES
+    : filter === 'alert' ? FACILITIES.filter(f => f.hp <= 30)
+    : FACILITIES.filter(f => f.type === filter);
+  list.forEach(f => renderFacility3D(f));
+}
+
+// ================= app.js 함수 훅킹 =================
+const _origAddMarkers = window.addMarkers;
+window.addMarkers = function(filter) {
+  if (typeof _origAddMarkers === 'function') _origAddMarkers(filter);
+  render3DAllMarkers(filter);
+};
+
+const _origSelectFacility = window.selectFacility;
+window.selectFacility = function(id) {
+  if (typeof _origSelectFacility === 'function') _origSelectFacility(id);
+  const f = (typeof FACILITIES !== 'undefined' ? FACILITIES : []).find(x => x.id === id);
+  if (f && f.lat != null && f.lng != null) {
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(f.lng, f.lat - 0.001, 180),
+      orientation: {
+        heading: Cesium.Math.toRadians(0),
+        pitch: Cesium.Math.toRadians(-45),
+        roll: 0,
+      },
+      duration: 1.4,
+    });
+  }
+};
+
+const _origSwitchPark = window.switchPark;
+window.switchPark = function(pid) {
+  if (typeof _origSwitchPark === 'function') _origSwitchPark(pid);
+  const park = getCurrentPark();
+  render3DBoundary();
+  render3DAllMarkers(typeof currentFilter !== 'undefined' ? currentFilter : 'all');
+  // 카메라 이동
+  const allPts = park.boundary && park.boundary.length ? park.boundary.reduce((a, p) => a.concat(p || []), []) : [];
+  if (allPts.length >= 3) {
+    const lats = allPts.map(p => p[0]);
+    const lngs = allPts.map(p => p[1]);
+    const rect = Cesium.Rectangle.fromDegrees(
+      Math.min(...lngs), Math.min(...lats),
+      Math.max(...lngs), Math.max(...lats)
+    );
+    viewer.camera.flyTo({ destination: rect, duration: 1.4 });
+  } else if (park.center) {
+    viewer.camera.flyTo({
+      destination: Cesium.Cartesian3.fromDegrees(park.center[1], park.center[0], 2000),
+      orientation: { heading: 0, pitch: Cesium.Math.toRadians(-50), roll: 0 },
+      duration: 1.4,
+    });
+  }
+};
+
+// ============== 클릭 + 롱프레스 드래그 + 액션 오버레이 ==============
+const LONG_PRESS_MS = 500;
+let pressTimer = null;
+let pressedFacilityId = null;
+let dragMode = false;
+let justDragged = false;
+let actionsEl = null;
+let actionsForId = null;
+let actionsPostRenderFn = null;
+
+function entityScreenPos(facilityId, height) {
+  const f = (typeof FACILITIES !== 'undefined' ? FACILITIES : []).find(x => x.id === facilityId);
+  if (!f) return null;
+  const cart = Cesium.Cartesian3.fromDegrees(f.lng, f.lat, height || 60);
+  return viewer.scene.cartesianToCanvasCoordinates(cart);
+}
+
+function showMarkerActions(facilityId) {
+  hideMarkerActions();
+  actionsForId = facilityId;
+  actionsEl = document.createElement('div');
+  actionsEl.className = 'marker-actions';
+  actionsEl.style.position = 'fixed';
+  actionsEl.style.zIndex = '1200';
+  actionsEl.innerHTML = `
+    <button class="ma-btn ma-edit" onclick="window.editFacility('${facilityId}'); hideMarkerActions();">✏️ 수정</button>
+    <button class="ma-btn ma-delete" onclick="window.deleteFacility('${facilityId}'); hideMarkerActions();">🗑️ 삭제</button>
+  `;
+  document.body.appendChild(actionsEl);
+  positionMarkerActions();
+  actionsPostRenderFn = () => positionMarkerActions();
+  viewer.scene.postRender.addEventListener(actionsPostRenderFn);
+}
+
+function positionMarkerActions() {
+  if (!actionsEl || !actionsForId) return;
+  const pos = entityScreenPos(actionsForId, holoMode ? 60 : 2);
+  if (!pos) return;
+  actionsEl.style.left = pos.x + 'px';
+  actionsEl.style.top = (pos.y + 24) + 'px';
+  actionsEl.style.transform = 'translateX(-50%)';
+}
+
+function hideMarkerActions() {
+  if (actionsPostRenderFn) {
+    try { viewer.scene.postRender.removeEventListener(actionsPostRenderFn); } catch(e){}
+    actionsPostRenderFn = null;
+  }
+  if (actionsEl) { actionsEl.remove(); actionsEl = null; }
+  actionsForId = null;
+}
+
+// 빈 공간 클릭 시 액션 오버레이 숨김
+document.addEventListener('click', (e) => {
+  if (!actionsEl) return;
+  if (actionsEl.contains(e.target)) return;
+  // 지도 캔버스를 클릭했고 타겟이 다른 시설 마커면 계속, 아니면 숨김
+  // 단순히 "다른 곳" 클릭이면 닫기로 처리 (시설 선택은 LEFT_CLICK으로 따로 처리됨)
+});
+
+const handler = viewer.screenSpaceEventHandler;
+
+handler.setInputAction((event) => {
+  const picked = viewer.scene.pick(event.position);
+  if (picked && picked.id && picked.id.facilityId) {
+    pressedFacilityId = picked.id.facilityId;
+    if (pressTimer) clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      pressTimer = null;
+      if (!pressedFacilityId) return;
+      // 롱프레스 → 드래그 모드 진입
+      dragMode = true;
+      viewer.scene.screenSpaceCameraController.enableInputs = false;
+      document.body.style.cursor = 'grabbing';
+      if (typeof showToast === 'function') {
+        showToast('✋', `<strong>드래그 모드</strong> · 드래그해서 이동, 놓으면 저장`, 'info', 4000);
+      }
+      showMarkerActions(pressedFacilityId);
+      if (navigator.vibrate) navigator.vibrate(30);
+    }, LONG_PRESS_MS);
+  } else {
+    pressedFacilityId = null;
+    hideMarkerActions();
+  }
+}, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+
+handler.setInputAction((event) => {
+  if (!dragMode || !pressedFacilityId) return;
+  const cart = viewer.camera.pickEllipsoid(event.endPosition, viewer.scene.globe.ellipsoid);
+  if (!cart) return;
+  const c = Cesium.Cartographic.fromCartesian(cart);
+  const lng = Cesium.Math.toDegrees(c.longitude);
+  const lat = Cesium.Math.toDegrees(c.latitude);
+  const f = (typeof FACILITIES !== 'undefined' ? FACILITIES : []).find(x => x.id === pressedFacilityId);
+  if (!f) return;
+  f.lat = lat;
+  f.lng = lng;
+  renderFacility3D(f);
+  positionMarkerActions();
+}, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+handler.setInputAction(() => {
+  if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+  if (dragMode) {
+    const fid = pressedFacilityId;
+    dragMode = false;
+    viewer.scene.screenSpaceCameraController.enableInputs = true;
+    document.body.style.cursor = '';
+    justDragged = true;
+    setTimeout(() => { justDragged = false; }, 120);
+    if (typeof saveFacilities === 'function') saveFacilities();
+    if (fid && typeof showToast === 'function') {
+      const f = (typeof FACILITIES !== 'undefined' ? FACILITIES : []).find(x => x.id === fid);
+      if (f) showToast('📍', `<strong>${f.name}</strong> 위치 이동 저장됨`, 'ok', 2500);
+    }
+  }
+  pressedFacilityId = null;
+}, Cesium.ScreenSpaceEventType.LEFT_UP);
+
+// 짧은 클릭 → selectFacility
+handler.setInputAction((click) => {
+  if (justDragged) return; // 드래그 직후 클릭 무시
+  const picked = viewer.scene.pick(click.position);
+  if (picked && picked.id && picked.id.facilityId) {
+    if (actionsEl && actionsForId !== picked.id.facilityId) hideMarkerActions();
+    window.selectFacility(picked.id.facilityId);
+  } else {
+    hideMarkerActions();
+  }
+}, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+
+// ================= 카메라 프리셋 =================
+function flyOverview() {
+  const park = getCurrentPark();
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(park.center[1], park.center[0] - 0.006, 1500),
+    orientation: { heading: 0, pitch: Cesium.Math.toRadians(-45), roll: 0 },
+    duration: 1.4,
+  });
+}
+function flyTop() {
+  const park = getCurrentPark();
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(park.center[1], park.center[0], 2000),
+    orientation: { heading: 0, pitch: Cesium.Math.toRadians(-89), roll: 0 },
+    duration: 1.2,
+  });
+}
+function flyTilted() {
+  const park = getCurrentPark();
+  viewer.camera.flyTo({
+    destination: Cesium.Cartesian3.fromDegrees(park.center[1], park.center[0] - 0.008, 1200),
+    orientation: { heading: 0, pitch: Cesium.Math.toRadians(-35), roll: 0 },
+    duration: 1.6,
+  });
+}
+
+function toggleHolo() {
+  holoMode = !holoMode;
+  render3DBoundary();
+  render3DAllMarkers(typeof currentFilter !== 'undefined' ? currentFilter : 'all');
+  applyHoloTone();
+  const btn = document.getElementById('lyr-holo');
+  if (btn) btn.classList.toggle('active', holoMode);
+}
+
+// 초기 렌더: app.js 초기화 직후 한 번 더
+setTimeout(() => {
+  render3DBoundary();
+  render3DAllMarkers('all');
+  applyHoloTone();
+  flyOverview();
+}, 300);
+</script>
 </body>
 </html>

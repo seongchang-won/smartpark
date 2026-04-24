@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
 <meta name="theme-color" content="#090e1a">
 <title>태화강국가정원 3D · 스마트공원 IoT 통합관제</title>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
@@ -86,7 +87,6 @@
       실시간 모니터링
     </div>
     <div class="clock mono" id="clock"></div>
-    <a href="index.html" class="hdr-icon-btn" title="2D 지도로 돌아가기" style="text-decoration:none;">🗺️</a>
     <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="테마 전환">🌙</button>
   </div>
 </div>
@@ -562,11 +562,134 @@ window.switchPark = function(pid) {
   }
 };
 
-// Cesium 클릭 → 2D selectFacility 트리거
-viewer.screenSpaceEventHandler.setInputAction((click) => {
+// ============== 클릭 + 롱프레스 드래그 + 액션 오버레이 ==============
+const LONG_PRESS_MS = 500;
+let pressTimer = null;
+let pressedFacilityId = null;
+let dragMode = false;
+let justDragged = false;
+let actionsEl = null;
+let actionsForId = null;
+let actionsPostRenderFn = null;
+
+function entityScreenPos(facilityId, height) {
+  const f = (typeof FACILITIES !== 'undefined' ? FACILITIES : []).find(x => x.id === facilityId);
+  if (!f) return null;
+  const cart = Cesium.Cartesian3.fromDegrees(f.lng, f.lat, height || 60);
+  return viewer.scene.cartesianToCanvasCoordinates(cart);
+}
+
+function showMarkerActions(facilityId) {
+  hideMarkerActions();
+  actionsForId = facilityId;
+  actionsEl = document.createElement('div');
+  actionsEl.className = 'marker-actions';
+  actionsEl.style.position = 'fixed';
+  actionsEl.style.zIndex = '1200';
+  actionsEl.innerHTML = `
+    <button class="ma-btn ma-edit" onclick="window.editFacility('${facilityId}'); hideMarkerActions();">✏️ 수정</button>
+    <button class="ma-btn ma-delete" onclick="window.deleteFacility('${facilityId}'); hideMarkerActions();">🗑️ 삭제</button>
+  `;
+  document.body.appendChild(actionsEl);
+  positionMarkerActions();
+  actionsPostRenderFn = () => positionMarkerActions();
+  viewer.scene.postRender.addEventListener(actionsPostRenderFn);
+}
+
+function positionMarkerActions() {
+  if (!actionsEl || !actionsForId) return;
+  const pos = entityScreenPos(actionsForId, holoMode ? 60 : 2);
+  if (!pos) return;
+  actionsEl.style.left = pos.x + 'px';
+  actionsEl.style.top = (pos.y + 24) + 'px';
+  actionsEl.style.transform = 'translateX(-50%)';
+}
+
+function hideMarkerActions() {
+  if (actionsPostRenderFn) {
+    try { viewer.scene.postRender.removeEventListener(actionsPostRenderFn); } catch(e){}
+    actionsPostRenderFn = null;
+  }
+  if (actionsEl) { actionsEl.remove(); actionsEl = null; }
+  actionsForId = null;
+}
+
+// 빈 공간 클릭 시 액션 오버레이 숨김
+document.addEventListener('click', (e) => {
+  if (!actionsEl) return;
+  if (actionsEl.contains(e.target)) return;
+  // 지도 캔버스를 클릭했고 타겟이 다른 시설 마커면 계속, 아니면 숨김
+  // 단순히 "다른 곳" 클릭이면 닫기로 처리 (시설 선택은 LEFT_CLICK으로 따로 처리됨)
+});
+
+const handler = viewer.screenSpaceEventHandler;
+
+handler.setInputAction((event) => {
+  const picked = viewer.scene.pick(event.position);
+  if (picked && picked.id && picked.id.facilityId) {
+    pressedFacilityId = picked.id.facilityId;
+    if (pressTimer) clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => {
+      pressTimer = null;
+      if (!pressedFacilityId) return;
+      // 롱프레스 → 드래그 모드 진입
+      dragMode = true;
+      viewer.scene.screenSpaceCameraController.enableInputs = false;
+      document.body.style.cursor = 'grabbing';
+      if (typeof showToast === 'function') {
+        showToast('✋', `<strong>드래그 모드</strong> · 드래그해서 이동, 놓으면 저장`, 'info', 4000);
+      }
+      showMarkerActions(pressedFacilityId);
+      if (navigator.vibrate) navigator.vibrate(30);
+    }, LONG_PRESS_MS);
+  } else {
+    pressedFacilityId = null;
+    hideMarkerActions();
+  }
+}, Cesium.ScreenSpaceEventType.LEFT_DOWN);
+
+handler.setInputAction((event) => {
+  if (!dragMode || !pressedFacilityId) return;
+  const cart = viewer.camera.pickEllipsoid(event.endPosition, viewer.scene.globe.ellipsoid);
+  if (!cart) return;
+  const c = Cesium.Cartographic.fromCartesian(cart);
+  const lng = Cesium.Math.toDegrees(c.longitude);
+  const lat = Cesium.Math.toDegrees(c.latitude);
+  const f = (typeof FACILITIES !== 'undefined' ? FACILITIES : []).find(x => x.id === pressedFacilityId);
+  if (!f) return;
+  f.lat = lat;
+  f.lng = lng;
+  renderFacility3D(f);
+  positionMarkerActions();
+}, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
+
+handler.setInputAction(() => {
+  if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
+  if (dragMode) {
+    const fid = pressedFacilityId;
+    dragMode = false;
+    viewer.scene.screenSpaceCameraController.enableInputs = true;
+    document.body.style.cursor = '';
+    justDragged = true;
+    setTimeout(() => { justDragged = false; }, 120);
+    if (typeof saveFacilities === 'function') saveFacilities();
+    if (fid && typeof showToast === 'function') {
+      const f = (typeof FACILITIES !== 'undefined' ? FACILITIES : []).find(x => x.id === fid);
+      if (f) showToast('📍', `<strong>${f.name}</strong> 위치 이동 저장됨`, 'ok', 2500);
+    }
+  }
+  pressedFacilityId = null;
+}, Cesium.ScreenSpaceEventType.LEFT_UP);
+
+// 짧은 클릭 → selectFacility
+handler.setInputAction((click) => {
+  if (justDragged) return; // 드래그 직후 클릭 무시
   const picked = viewer.scene.pick(click.position);
   if (picked && picked.id && picked.id.facilityId) {
+    if (actionsEl && actionsForId !== picked.id.facilityId) hideMarkerActions();
     window.selectFacility(picked.id.facilityId);
+  } else {
+    hideMarkerActions();
   }
 }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
 
