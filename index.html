@@ -1224,35 +1224,75 @@ window.renderParkOutline = function() {
   render3DBoundary();
 };
 
-// finishVertexDelete 훅: 완료 후 정리 + 갱신
-const _origFinishVertexDelete = window.finishVertexDelete;
-if (typeof _origFinishVertexDelete === 'function') {
-  window.finishVertexDelete = function() {
-    _origFinishVertexDelete();
-    renderDrawingPreview();
-    render3DBoundary();
-  };
+// ── vertexDelete 실시간 boundary 업데이트 헬퍼 ──────────────
+let _vdOriginalBoundary = null; // 취소 시 원복용 백업
+let _vdFinishing = false;       // finishVertexDelete 구분 플래그
+
+function _vdApplyLiveBoundary() {
+  const vdParkId = typeof vertexDeleteParkId !== 'undefined' ? vertexDeleteParkId : null;
+  if (!vdParkId) return;
+  const park = (typeof PARKS !== 'undefined' ? PARKS : []).find(p => p.id === vdParkId);
+  if (!park) return;
+  const vdBoundary = typeof vertexDeleteBoundary !== 'undefined' ? vertexDeleteBoundary : [];
+  park.boundary = vdBoundary.map(p => p.slice());
+  if (park.id === (typeof currentParkId !== 'undefined' ? currentParkId : null)) {
+    PARK_BOUNDARY = park.boundary;
+  }
+  render3DBoundary();
 }
 
-// exitVertexDelete 훅: 취소/완료 후 Cesium 점 정리
-const _origExitVertexDelete = window.exitVertexDelete;
-if (typeof _origExitVertexDelete === 'function') {
-  window.exitVertexDelete = function() {
-    _origExitVertexDelete();
-    renderDrawingPreview();
-  };
+function _vdRestoreOriginalBoundary(savedParkId) {
+  if (!_vdOriginalBoundary || !savedParkId) return;
+  const park = (typeof PARKS !== 'undefined' ? PARKS : []).find(p => p.id === savedParkId);
+  if (!park) return;
+  park.boundary = _vdOriginalBoundary;
+  if (park.id === (typeof currentParkId !== 'undefined' ? currentParkId : null)) {
+    PARK_BOUNDARY = park.boundary;
+  }
+  render3DBoundary();
 }
 
-// startVertexDelete 훅: 시작 직후 Cesium 렌더
+// startVertexDelete 훅: 시작 전 백업 + Cesium 렌더
 const _origStartVertexDelete = window.startVertexDelete;
 if (typeof _origStartVertexDelete === 'function') {
   window.startVertexDelete = function(parkId) {
+    const park = (typeof PARKS !== 'undefined' ? PARKS : []).find(p => p.id === parkId);
+    _vdOriginalBoundary = park ? park.boundary.map(p => p.map(pt => [pt[0], pt[1]])) : null;
+    _vdFinishing = false;
     _origStartVertexDelete(parkId);
     setTimeout(renderDrawingPreview, 50);
   };
 }
 
-// renderVertexDeletion 훅: 점 삭제 때마다 Cesium 동기화
+// finishVertexDelete 훅: 완료 플래그 세팅 후 원본 호출 (저장 완료 후 갱신)
+const _origFinishVertexDelete = window.finishVertexDelete;
+if (typeof _origFinishVertexDelete === 'function') {
+  window.finishVertexDelete = function() {
+    _vdFinishing = true;
+    _origFinishVertexDelete();
+    _vdOriginalBoundary = null;
+    renderDrawingPreview();
+    render3DBoundary();
+  };
+}
+
+// exitVertexDelete 훅: 취소면 원복, 완료면 이미 처리됨
+const _origExitVertexDelete = window.exitVertexDelete;
+if (typeof _origExitVertexDelete === 'function') {
+  window.exitVertexDelete = function() {
+    const savedParkId = typeof vertexDeleteParkId !== 'undefined' ? vertexDeleteParkId : null;
+    const isCancelling = !_vdFinishing;
+    _vdFinishing = false;
+    _origExitVertexDelete();
+    if (isCancelling) {
+      _vdRestoreOriginalBoundary(savedParkId);
+      _vdOriginalBoundary = null;
+    }
+    renderDrawingPreview();
+  };
+}
+
+// renderVertexDeletion 훅: Leaflet 재렌더 시 Cesium 동기화 (보조)
 const _origRenderVertexDeletion = window.renderVertexDeletion;
 if (typeof _origRenderVertexDeletion === 'function') {
   window.renderVertexDeletion = function() {
@@ -1298,6 +1338,7 @@ handler.setInputAction((click) => {
           if (confirm(`이 영역(${polyIdx + 1}번)을 전체 삭제할까요?`)) {
             boundary.splice(polyIdx, 1);
             if (typeof updateVertexCount === 'function') updateVertexCount();
+            _vdApplyLiveBoundary();
             renderDrawingPreview();
           }
         } else {
@@ -1306,6 +1347,7 @@ handler.setInputAction((click) => {
       } else {
         poly.splice(ptIdx, 1);
         if (typeof updateVertexCount === 'function') updateVertexCount();
+        _vdApplyLiveBoundary();
         renderDrawingPreview();
       }
     }
