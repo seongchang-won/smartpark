@@ -247,6 +247,22 @@ function applyHoloTone() {
   }
 }
 
+// Emoji를 단색 네온으로 틴트 처리 (source-in 합성)
+function drawTintedEmoji(ctx, emoji, cx, cy, fontSize, tintColor) {
+  const s = Math.ceil(fontSize * 1.8);
+  const temp = document.createElement('canvas');
+  temp.width = s; temp.height = s;
+  const tctx = temp.getContext('2d');
+  tctx.font = `${fontSize}px "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", sans-serif`;
+  tctx.textAlign = 'center';
+  tctx.textBaseline = 'middle';
+  tctx.fillText(emoji, s/2, s/2 + 1);
+  tctx.globalCompositeOperation = 'source-in';
+  tctx.fillStyle = tintColor;
+  tctx.fillRect(0, 0, s, s);
+  ctx.drawImage(temp, cx - s/2, cy - s/2);
+}
+
 function buildHoloCanvas(f) {
   const cfg = TYPE_CFG_3D[f.type] || { icon:'📍', color:'#22d3ee' };
   const hp = f.hp || 0;
@@ -256,12 +272,16 @@ function buildHoloCanvas(f) {
   canvas.width = size; canvas.height = size;
   const ctx = canvas.getContext('2d');
   const cx = size/2, cy = size/2;
+
+  // 외곽 글로우
   const glow = ctx.createRadialGradient(cx, cy, 10, cx, cy, 46);
   glow.addColorStop(0, main + 'aa');
   glow.addColorStop(0.6, main + '33');
   glow.addColorStop(1, main + '00');
   ctx.fillStyle = glow;
   ctx.fillRect(0, 0, size, size);
+
+  // 팔각 외곽 링
   ctx.strokeStyle = main;
   ctx.lineWidth = 2;
   ctx.shadowColor = main;
@@ -276,6 +296,8 @@ function buildHoloCanvas(f) {
   ctx.closePath();
   ctx.stroke();
   ctx.shadowBlur = 0;
+
+  // 내부 어두운 홀로그램 배경
   ctx.fillStyle = 'rgba(8, 20, 32, 0.85)';
   ctx.beginPath();
   for (let i = 0; i < 8; i++) {
@@ -286,15 +308,55 @@ function buildHoloCanvas(f) {
   }
   ctx.closePath();
   ctx.fill();
-  ctx.font = '28px sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(cfg.icon, cx, cy - 2);
+
+  // 내부 스캔라인 효과
+  ctx.save();
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2 - Math.PI / 8;
+    const x = cx + Math.cos(a) * 34;
+    const y = cy + Math.sin(a) * 34;
+    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+  ctx.clip();
+  ctx.strokeStyle = main + '22';
+  ctx.lineWidth = 1;
+  for (let y = cy - 32; y < cy + 32; y += 4) {
+    ctx.beginPath();
+    ctx.moveTo(cx - 36, y);
+    ctx.lineTo(cx + 36, y);
+    ctx.stroke();
+  }
+  ctx.restore();
+
+  // 아이콘 (네온 틴트)
+  drawTintedEmoji(ctx, cfg.icon, cx, cy - 2, 28, main);
+
+  // 하단 HP 바
   ctx.fillStyle = main;
   ctx.fillRect(cx - 14, cy + 22, 28 * (hp/100), 2);
   ctx.strokeStyle = main + '55';
   ctx.lineWidth = 1;
   ctx.strokeRect(cx - 14, cy + 22, 28, 2);
+
+  // 모서리 브래킷 (사이버 액센트)
+  const br = 38;
+  const brLen = 6;
+  ctx.strokeStyle = main;
+  ctx.lineWidth = 2;
+  ctx.shadowColor = main; ctx.shadowBlur = 6;
+  [[-1,-1],[1,-1],[-1,1],[1,1]].forEach(([sx, sy]) => {
+    const x = cx + sx * br;
+    const y = cy + sy * br;
+    ctx.beginPath();
+    ctx.moveTo(x - sx * brLen, y);
+    ctx.lineTo(x, y);
+    ctx.lineTo(x, y - sy * brLen);
+    ctx.stroke();
+  });
+  ctx.shadowBlur = 0;
+
   return canvas.toDataURL();
 }
 
