@@ -814,6 +814,7 @@ function selectFacility(id) {
     <button class="action-btn primary" onclick="openInspectPanel('${f.id}')">📋 점검 리스트${pendingBadge}</button>
     <button class="action-btn default" onclick="showHistory('${f.id}')">📊 이력 보기</button>
     <button class="action-btn repair" onclick="openRepairModal('${f.id}')">🔧 수리 요청${repairBadge}</button>
+    <button class="action-btn qr" onclick="printFacilityQR('${f.id}')">🖨️ QR 출력</button>
   </div>`;
 
   // Event log
@@ -843,6 +844,116 @@ function selectFacility(id) {
   html += `</div>`;
   document.getElementById('detailPanel').innerHTML = html;
   openSidebarIfMobile();
+}
+
+function printFacilityQR(id) {
+  const f = FACILITIES.find(x => x.id === id);
+  if (!f) return;
+  const cfg = TYPE_CFG[f.type] || { label: f.type, icon: '📍' };
+  const park = getCurrentPark();
+  const baseUrl = 'https://seongchang-won.github.io/smartpark/';
+  const facilityUrl = `${baseUrl}?facility=${encodeURIComponent(f.id)}`;
+  const qrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&margin=8&data=${encodeURIComponent(facilityUrl)}`;
+  const typeLabel = { bench:'벤치', restroom:'화장실', exercise:'운동기구', light:'가로등', parking:'주차장', bin:'쓰레기통', cctv:'CCTV' }[f.type] || f.type;
+
+  const win = window.open('', '_blank', 'width=420,height=560');
+  win.document.write(`<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>QR 태그 · ${f.name}</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;700;900&display=swap');
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Noto Sans KR', sans-serif;
+    background: #fff;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; padding: 20px;
+  }
+  .card {
+    width: 340px;
+    border: 2px solid #0f172a;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  }
+  .card-header {
+    background: #0f172a;
+    color: #fff;
+    padding: 14px 16px 12px;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .card-icon { font-size: 28px; line-height: 1; }
+  .card-title { font-size: 17px; font-weight: 900; }
+  .card-subtitle { font-size: 11px; color: #94a3b8; margin-top: 2px; }
+  .card-body {
+    background: #fff;
+    padding: 20px;
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+  }
+  .qr-wrap {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px;
+    background: #fff;
+  }
+  .qr-wrap img { display: block; width: 180px; height: 180px; }
+  .info-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+  .info-table tr { border-bottom: 1px solid #f1f5f9; }
+  .info-table tr:last-child { border-bottom: none; }
+  .info-table td { padding: 6px 4px; }
+  .info-table td:first-child { color: #64748b; font-weight: 700; width: 80px; }
+  .info-table td:last-child { color: #0f172a; font-weight: 600; }
+  .url-note { font-size: 10px; color: #94a3b8; text-align: center; word-break: break-all; }
+  .card-footer {
+    background: #f8fafc;
+    border-top: 1px solid #e2e8f0;
+    padding: 10px 16px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .footer-logo { font-size: 11px; color: #64748b; font-weight: 700; }
+  .footer-date { font-size: 10px; color: #94a3b8; }
+  @media print {
+    body { padding: 0; background: #fff; }
+    .card { box-shadow: none; border-radius: 0; }
+    .no-print { display: none !important; }
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="card-header">
+    <div class="card-icon">${cfg.icon}</div>
+    <div>
+      <div class="card-title">${f.name}</div>
+      <div class="card-subtitle">${park ? park.name : ''} · ${typeLabel}</div>
+    </div>
+  </div>
+  <div class="card-body">
+    <div class="qr-wrap">
+      <img src="${qrUrl}" alt="QR코드" />
+    </div>
+    <table class="info-table">
+      <tr><td>시설 ID</td><td>${f.id}</td></tr>
+      <tr><td>종류</td><td>${cfg.icon} ${typeLabel}</td></tr>
+      <tr><td>구역</td><td>${f.zone || '-'}</td></tr>
+      <tr><td>설치일</td><td>${f.installed || '-'}</td></tr>
+      <tr><td>HP</td><td>${f.hp} / ${f.maxHp}</td></tr>
+    </table>
+    <div class="url-note">${facilityUrl}</div>
+  </div>
+  <div class="card-footer">
+    <div class="footer-logo">🌿 스마트공원 IoT 관제</div>
+    <div class="footer-date">${new Date().toLocaleDateString('ko-KR')}</div>
+  </div>
+</div>
+<div class="no-print" style="text-align:center;margin-top:16px;">
+  <button onclick="window.print()" style="padding:10px 28px;font-size:14px;font-weight:700;background:#0f172a;color:#fff;border:none;border-radius:8px;cursor:pointer;">🖨️ 인쇄</button>
+</div>
+</body>
+</html>`);
+  win.document.close();
 }
 
 function clearSelection() {
